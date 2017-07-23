@@ -1,9 +1,9 @@
 /*
  * @(#)SimplifiedPathIterator.java
  *
- * $Date: 2009-02-22 14:56:51 -0600 (Sun, 22 Feb 2009) $
+ * $Date: 2011-05-02 16:01:45 -0500 (Mon, 02 May 2011) $
  *
- * Copyright (c) 2009 by Jeremy Wood.
+ * Copyright (c) 2011 by Jeremy Wood.
  * All rights reserved.
  *
  * The copyright of this software is owned by Jeremy Wood. 
@@ -12,10 +12,10 @@
  * Jeremy Wood. For details see accompanying license terms.
  * 
  * This software is probably, but not necessarily, discussed here:
- * http://javagraphics.blogspot.com/
+ * http://javagraphics.java.net/
  * 
- * And the latest version should be available here:
- * https://javagraphics.dev.java.net/
+ * That site should also contain the most recent official version
+ * of this software.  (See the SVN repository for more details.)
  */
 package com.bric.geom;
 
@@ -26,7 +26,6 @@ import java.awt.geom.PathIterator;
  * <P>In addition to being more efficient, this can avoid
  * divide-by-zero errors for some operations.
  * 
- * @version 1.1
  */
 public class SimplifiedPathIterator implements PathIterator {
     /** This is the tolerance a term can be to be considered "zero".
@@ -63,6 +62,29 @@ public class SimplifiedPathIterator implements PathIterator {
 		return Math.abs(determinant)<TOL*TOL;
 	}
 	
+	private static double[] doubleArray = new double[6];
+	/** This possibly reduces the degree of a segment, if possible.
+	 * 
+	 * @param type the current expected type of the segment data
+	 * @param lastX the previous X value from which this segment begins
+	 * @param lastY the previous Y value from which this segment begins
+	 * @param data the data of the current segment.
+	 * @return the new segment type, or the original <code>type</code>
+	 * argument if nothing was modified.
+	 */
+	public static int simplify(int type,float lastX,float lastY,float[] data) {
+		synchronized(doubleArray) {
+			for(int a = 0; a<data.length; a++) {
+				doubleArray[a] = data[a];
+			}
+			int returnValue = simplify(type, lastX, lastY, doubleArray);
+			for(int a = 0; a<data.length; a++) {
+				data[a] = (float)doubleArray[a];
+			}
+			return returnValue;
+		}
+	}
+	
 	/** This possibly reduces the degree of a segment, if possible.
 	 * 
 	 * @param type the current expected type of the segment data
@@ -80,17 +102,47 @@ public class SimplifiedPathIterator implements PathIterator {
 				data[1] = data[5];
 				return SEG_LINETO;
 			}
+			
+			
+			double ax = -lastX + 3 * data[0] - 3 * data[2] + data[4];
+			double ay = -lastY + 3 * data[1] - 3 * data[3] + data[5];
+			
+			if(Math.abs(ax)<.000001 && Math.abs(ay)<.000001) {
+				double bx = 3 * lastX - 6 * data[0] + 3 * data[2];
+				double cx = -3 * lastX + 3 * data[0];
+				//double dx = lastX;
+				double by = 3 * lastY - 6 * data[1] + 3 * data[3];
+				double cy = -3 * lastY + 3 * data[1];
+				//double dy = lastY;
+				
+				data[1] = (cy+2*lastY)/2.0;
+				data[3] = by-lastY+2*data[1];
+
+				data[0] = (cx+2*lastX)/2.0;
+				data[2] = bx-lastX+2*data[0];
+
+				return simplify(PathIterator.SEG_QUADTO, lastX, lastY, data);
+			}
 		} else if(type==SEG_QUADTO) {
 			if(collinear(lastX,lastY,data[2],data[3],data[0],data[1])) {
 				data[0] = data[2];
 				data[1] = data[3];
 				return SEG_LINETO;
 			}
-		}
 
-		//Are there other checks we can be doing?
-		//for example: can we end up with a cubic
-		//curve where ax and ay equal zero?
+			double ax = lastX - 2 * data[0] + data[2];
+			double ay = lastY - 2 * data[1] + data[3];
+			if(Math.abs(ax)<.000001 && Math.abs(ay)<.000001) {
+				double bx = -2 * lastX + 2 * data[0];
+				//double cx = lastX;
+				double by = -2 * lastY + 2 * data[1];
+				//double cy = lastY;
+				
+				data[0] = (bx+2*lastX)/2.0;
+				data[1] = (by+2*lastY)/2.0;
+				return PathIterator.SEG_LINETO;
+			}
+		}
 		
 		return type;
 	}

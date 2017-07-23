@@ -1,7 +1,27 @@
+/*
+ * @(#)RectangleReader.java
+ *
+ * $Date: 2012-03-16 00:55:19 -0500 (Fri, 16 Mar 2012) $
+ *
+ * Copyright (c) 2011 by Jeremy Wood.
+ * All rights reserved.
+ *
+ * The copyright of this software is owned by Jeremy Wood. 
+ * You may not use, copy or modify this software, except in  
+ * accordance with the license agreement you entered into with  
+ * Jeremy Wood. For details see accompanying license terms.
+ * 
+ * This software is probably, but not necessarily, discussed here:
+ * http://javagraphics.java.net/
+ * 
+ * That site should also contain the most recent official version
+ * of this software.  (See the SVN repository for more details.)
+ */
 package com.bric.geom;
 
 import java.awt.Rectangle;
 import java.awt.Shape;
+import java.awt.geom.AffineTransform;
 import java.awt.geom.PathIterator;
 import java.awt.geom.Rectangle2D;
 
@@ -17,6 +37,16 @@ import com.bric.math.MathG;
  * goes away!
  */
 public class RectangleReader {
+	/** Returns true if a shape is a rectangle. */
+	public static boolean isRectangle(Shape s) {
+		return convert(s)!=null;
+	}
+	
+	/** Returns true if a shape is a rectangle when the transform is applied. */
+	public static boolean isRectangle(Shape s,AffineTransform tx) {
+		return convert(s, tx)!=null;
+	}
+	
 	/** This studies a shape and determines if it is
 	 * a <code>Rectangle</code>, a <code>Rectangle2D</code>,
 	 * or neither.
@@ -26,13 +56,29 @@ public class RectangleReader {
 	 * or <code>null</code>.
 	 */
 	public static final Rectangle2D convert(Shape shape) {
+		return convert(shape, null);
+	}
+	
+	/** This studies a shape and determines if it is
+	 * a <code>Rectangle</code>, a <code>Rectangle2D</code>,
+	 * or neither.
+	 * 
+	 * @param shape the shape to study
+	 * @param transform the optional transform to apply to the shape.
+	 * @return a <code>Rectangle</code>, <code>Rectangle2D</code>,
+	 * or <code>null</code>.
+	 */	
+	public static final Rectangle2D convert(Shape shape,AffineTransform transform) {
 		if(shape==null)
 			return null;
 		
-		if(shape instanceof Rectangle)
+		if(transform!=null && transform.isIdentity())
+			transform = null;
+		
+		if(shape instanceof Rectangle && transform==null)
 			return (Rectangle)shape;
 		
-		if(shape instanceof Rectangle2D) {
+		if(shape instanceof Rectangle2D && transform==null) {
 			Rectangle2D rect = (Rectangle2D)shape;
 			return getRectangle( rect );
 		}
@@ -54,18 +100,28 @@ public class RectangleReader {
 		double lastX = 0;
 		double lastY = 0;
 		
-		PathIterator i = shape.getPathIterator(null);
+		PathIterator i = shape.getPathIterator(transform);
 		
 		double left = 0;
 		double right = 0;
 		double top = 0;
 		double bottom = 0;
 		boolean defined = false;
+		double moveX = 0;
+		double moveY = 0;
 
 		while(i.isDone()==false) {
 			k = i.currentSegment(data);
 			k = SimplifiedPathIterator.simplify(k, lastX, lastY, data);
+			if(k==PathIterator.SEG_CLOSE) {
+				k = PathIterator.SEG_LINETO;
+				data[0] = moveX;
+				data[1] = moveY;
+			}
+			
 			if(k==PathIterator.SEG_MOVETO) {
+				moveX = data[0];
+				moveY = data[1];
 				lastX = data[0];
 				lastY = data[1];
 				//multiple paths are a deal-breaker
@@ -83,6 +139,11 @@ public class RectangleReader {
 					if(lastY<top) top = lastY;
 					if(lastX>right) right = lastX;
 					if(lastY>bottom) bottom = lastY;
+					
+					//either X or Y needs to be the same
+					//in a rectangle:
+					if(lastX!=data[0] && lastY!=data[1])
+						return null;
 				}
 
 				if(data[0]<left) left = data[0];
@@ -100,53 +161,70 @@ public class RectangleReader {
 		if(defined==false)
 			return null;
 		
-		i = shape.getPathIterator(null);
+		if(lastX!=moveX && lastY!=moveY)
+			return null;
 		
-		double moveX = 0;
-		double moveY = 0;
+		i = shape.getPathIterator(transform);
 		
-		double x1 = 0;
-		double y1 = 0;
-		double x2 = 0;
-		double y2 = 0;
-
 		while(i.isDone()==false) {
 			k = i.currentSegment(data);
 			k = SimplifiedPathIterator.simplify(k, lastX, lastY, data);
-			boolean checkLine = false;
 			if(k==PathIterator.SEG_MOVETO) {
 				lastX = data[0];
 				lastY = data[1];
-				moveX = lastX;
-				moveY = lastY;
-			} else if(k==PathIterator.SEG_CLOSE) {
-				x1 = lastX;
-				y1 = lastY;
-				x2 = moveX;
-				y2 = moveY;
-				checkLine = true;
 			} else if(k==PathIterator.SEG_LINETO) {
-				x1 = lastX;
-				y1 = lastY;
-				x2 = data[0];
-				y2 = data[1];
-				checkLine = true;
-				
-				lastX = data[0];
-				lastY = data[1];
-			}
-			
-			if(checkLine) {
-				if(SimplifiedPathIterator.collinear(x1, y1, x2, y2, left, top)==false &&
-						SimplifiedPathIterator.collinear(x1, y1, x2, y2, left+right, top+bottom)==false) {
+				double midX = (data[0]+lastX)/2;
+				double midY = (data[1]+lastY)/2;
+				if(data[1]==top) {
+					if(SimplifiedPathIterator.collinear(left, top, right, top, data[0], data[1])==false) {
+						return null;
+					}
+				} else if(data[1]==bottom) {
+					if(SimplifiedPathIterator.collinear(left, bottom, right, bottom, data[0], data[1])==false) {
+						return null;
+					}
+				} else if(data[0]==left) {
+					if(SimplifiedPathIterator.collinear(left, top, left, bottom, data[0], data[1])==false) {
+						return null;
+					}
+				} else if(data[0]==right) {
+					if(SimplifiedPathIterator.collinear(right, top, right, bottom, data[0], data[1])==false) {
+						return null;
+					}
+				} else {
 					return null;
 				}
+
+				if(midY==top) {
+					if(SimplifiedPathIterator.collinear(left, top, right, top, midX, midY)==false) {
+						return null;
+					}
+				} else if(midY==bottom) {
+					if(SimplifiedPathIterator.collinear(left, bottom, right, bottom, midX, midY)==false) {
+						return null;
+					}
+				} else if(midX==left) {
+					if(SimplifiedPathIterator.collinear(left, top, left, bottom, midX, midY)==false) {
+						return null;
+					}
+				} else if(midX==right) {
+					if(SimplifiedPathIterator.collinear(right, top, right, bottom, midX, midY)==false) {
+						return null;
+					}
+				} else {
+					return null;
+				}
+				lastX = data[0];
+				lastY = data[1];
 			}
 			
 			i.next();
 		}
 		
-		return getRectangle(left,top,right-left,bottom-top);
+		Rectangle intRect = getRectangle(left,top,right-left,bottom-top);
+		if(intRect!=null) return intRect;
+		
+		return new Rectangle2D.Double(left, top, right-left, bottom-top);
 	}
 	
 	private static final double TOL = .000000000001;

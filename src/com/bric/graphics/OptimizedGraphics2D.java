@@ -1,9 +1,9 @@
 /*
  * @(#)OptimizedGraphics2D.java
  *
- * $Date: 2009-02-20 00:23:53 -0800 (Fri, 20 Feb 2009) $
+ * $Date: 2012-07-03 01:10:05 -0500 (Tue, 03 Jul 2012) $
  *
- * Copyright (c) 2009 by Jeremy Wood.
+ * Copyright (c) 2011 by Jeremy Wood.
  * All rights reserved.
  *
  * The copyright of this software is owned by Jeremy Wood. 
@@ -12,13 +12,14 @@
  * Jeremy Wood. For details see accompanying license terms.
  * 
  * This software is probably, but not necessarily, discussed here:
- * http://javagraphics.blogspot.com/
+ * http://javagraphics.java.net/
  * 
- * And the latest version should be available here:
- * https://javagraphics.dev.java.net/
+ * That site should also contain the most recent official version
+ * of this software.  (See the SVN repository for more details.)
  */
 package com.bric.graphics;
 
+import java.awt.AlphaComposite;
 import java.awt.Color;
 import java.awt.Composite;
 import java.awt.Font;
@@ -28,12 +29,13 @@ import java.awt.Graphics2D;
 import java.awt.GraphicsConfiguration;
 import java.awt.Image;
 import java.awt.Paint;
+import java.awt.PaintContext;
 import java.awt.Polygon;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.RenderingHints.Key;
 import java.awt.Shape;
 import java.awt.Stroke;
-import java.awt.RenderingHints.Key;
 import java.awt.font.FontRenderContext;
 import java.awt.font.GlyphVector;
 import java.awt.geom.AffineTransform;
@@ -43,8 +45,10 @@ import java.awt.geom.Rectangle2D;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.awt.image.BufferedImageOp;
+import java.awt.image.ColorModel;
 import java.awt.image.ImageObserver;
 import java.awt.image.RenderedImage;
+import java.awt.image.WritableRaster;
 import java.awt.image.renderable.RenderableImage;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -63,19 +67,6 @@ import com.bric.util.JVM;
  */
 public class OptimizedGraphics2D extends Graphics2D {
 	
-	/** The major Java version being used (1.4, 1.5, 1.6, etc.).
-	 * Note this may be -1 if this is called without the right security
-	 * permissions. */
-	public static final float javaVersion = JVM.getMajorJavaVersion(true);
-	
-	/** Whether this session is on a Mac. */
-	public static final boolean isMac = (System.getProperty("os.name").toLowerCase().indexOf("mac")!=-1);
-	
-	/** If on a Mac: whether Quartz is the rendering pipeline. */
-	public static final boolean usingQuartz = isMac && ((javaVersion>0 && javaVersion<=1.4f) ||
-		(System.getProperty("apple.awt.graphics.UseQuartz")!=null && System.getProperty("apple.awt.graphics.UseQuartz").toString().equals("true")));
-	
-	
 	/** If this is <code>true</code>, then all optimizations are always applied.
 	 * However some optimizations are only improvements under certain settings,
 	 * so they aren't applied everywhere.  (For example, the <code>OPTIMIZE_GLYPH_VECTOR</code>
@@ -85,7 +76,7 @@ public class OptimizedGraphics2D extends Graphics2D {
 	 * class this is set to <code>true</code> so the flags can all be
 	 * explored in more detail.
 	 */
-	protected static boolean testingOptimizations = false;
+	public static boolean testingOptimizations = false;
 	
 	/** This flag uses the {@link com.bric.geom.Clipper} class to
 	 * avoid using the <code>Area</code> class (if possible) when
@@ -154,6 +145,14 @@ public class OptimizedGraphics2D extends Graphics2D {
 	 */
 	public static final long FIX_QUARTZ_CLIPPING_OFFSET = 64;
 	
+	public static final long OPTIMIZE_QUARTZ_CUSTOM_PAINTS = 128;
+	
+	/** A crash can occur painting rotated text using Java 1.5.
+	 * See: http://osdir.com/ml/java-dev/2010-06/msg00415.html
+	 * 
+	 */
+	public static final long FIX_GLYPH_VECTORS = 256;
+	
 	/** The <code>Graphics2D</code>this delegates to. */
 	public final Graphics2D g;
 	protected long mask;
@@ -169,24 +168,31 @@ public class OptimizedGraphics2D extends Graphics2D {
 		currentPaint = g.getPaint();
 	}
 
-	public void addRenderingHints(Map hints) {
+	@Override
+	public void addRenderingHints(Map<?, ?> hints) {
 		g.addRenderingHints(hints);
 	}
 
+	@Override
 	public void clearRect(int x, int y, int width, int height) {
 		g.clearRect(x, y, width, height);
 	}
 
 	private int insideClip = 0;
+	@Override
 	public synchronized void clip(Shape s) {
 		if(s==null)
 			return; 
 		
 		double dx = 0;
 		double dy = 0;
-		if( (mask & FIX_QUARTZ_CLIPPING_OFFSET) > 0 && usingQuartz) {
-			dx = -.5;
-			dy = -.5;
+		if( (mask & FIX_QUARTZ_CLIPPING_OFFSET) > 0 && JVM.usingQuartz) {
+			/** This used to be .5 in Aug of 09.
+			 * Then in Sept Apple came out with updates, and apparently
+			 * this should now be .25.
+			 */
+			dx = -.25;
+			dy = -.25;
 			Rectangle2D rect = RectangleReader.convert(s);
 			if(rect!=null) {
 				s = rect;
@@ -216,40 +222,49 @@ public class OptimizedGraphics2D extends Graphics2D {
 		}
 	}
 
+	@Override
 	public synchronized void clipRect(int x, int y, int width, int height) {
 		g.clipRect(x, y, width, height);
 		innerClipDefined = false;
 	}
 
+	@Override
 	public void copyArea(int x, int y, int width, int height, int dx, int dy) {
 		g.copyArea(x, y, width, height, dx, dy);
 	}
 
+	@Override
 	public Graphics create() {
 		return new OptimizedGraphics2D( (Graphics2D)g.create(), mask );
 	}
 
+	@Override
 	public void dispose() {
 		g.dispose();
 	}
 
+	@Override
 	public void draw(Shape s) {
 		g.draw(s);
 	}
 
+	@Override
 	public void draw3DRect(int x, int y, int width, int height, boolean raised) {
 		g.draw3DRect(x, y, width, height, raised);
 	}
 
+	@Override
 	public void drawArc(int x, int y, int width, int height, int startAngle,
 			int arcAngle) {
 		g.drawArc(x, y, width, height, startAngle, arcAngle);
 	}
 
+	@Override
 	public void drawBytes(byte[] data, int offset, int length, int x, int y) {
 		g.drawBytes(data, offset, length, x, y);
 	}
 
+	@Override
 	public void drawChars(char[] data, int offset, int length, int x, int y) {
 		if((mask & FIX_TEXT_RENDERING) > 0) {
 			AffineTransform t = getTransform();
@@ -277,9 +292,18 @@ public class OptimizedGraphics2D extends Graphics2D {
 		g.drawChars(data,offset,length,x,y);
 	}
 
+	@Override
 	public void drawGlyphVector(GlyphVector gv, float x, float y) {
-		if(((mask & OPTIMIZE_GLYPH_VECTORS)>0 && usingQuartz) || testingOptimizations) {
+		if(((mask & OPTIMIZE_GLYPH_VECTORS)>0 && JVM.usingQuartz) || testingOptimizations) {
 			if((currentPaint instanceof Color)==false) {
+				fill(gv.getOutline(x,y));
+				return;
+			}
+		}
+		if(((mask & FIX_GLYPH_VECTORS)>0 && (JVM.usingQuartz==false)) || testingOptimizations) {
+			if(innerTransform==null) innerTransform = getTransform();
+			
+			if( JVM.getMajorJavaVersion()==1.5f && (innerTransform.getShearX())<-.01) {
 				fill(gv.getOutline(x,y));
 				return;
 			}
@@ -289,8 +313,9 @@ public class OptimizedGraphics2D extends Graphics2D {
 
 	private static Color EMPTY_COLOR = new Color(0,0,0,0);
 	
+	@Override
 	public void drawImage(BufferedImage img, BufferedImageOp op, int x, int y) {
-		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (javaVersion>0 && javaVersion<=1.4f)) || testingOptimizations) {
+		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (JVM.javaVersion>0 && JVM.javaVersion<=1.4f)) || testingOptimizations) {
 			g.setPaint(EMPTY_COLOR);
 			g.drawImage(img, op, x, y);
 			g.setPaint(currentPaint);
@@ -299,8 +324,9 @@ public class OptimizedGraphics2D extends Graphics2D {
 		g.drawImage(img, op, x, y);
 	}
 
+	@Override
 	public boolean drawImage(Image img, AffineTransform xform, ImageObserver obs) {
-		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (javaVersion>0 && javaVersion<=1.4f)) || testingOptimizations) {
+		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (JVM.javaVersion>0 && JVM.javaVersion<=1.4f)) || testingOptimizations) {
 			try {
 				g.setPaint(EMPTY_COLOR);
 				return g.drawImage(img, xform, obs);
@@ -311,9 +337,10 @@ public class OptimizedGraphics2D extends Graphics2D {
 		return g.drawImage(img, xform, obs);
 	}
 
+	@Override
 	public boolean drawImage(Image img, int x, int y, Color bgcolor,
 			ImageObserver observer) {
-		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (javaVersion>0 && javaVersion<=1.4f)) || testingOptimizations) {
+		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (JVM.javaVersion>0 && JVM.javaVersion<=1.4f)) || testingOptimizations) {
 			try {
 				g.setPaint(EMPTY_COLOR);
 				return g.drawImage(img, x, y, bgcolor, observer);
@@ -324,8 +351,9 @@ public class OptimizedGraphics2D extends Graphics2D {
 		return g.drawImage(img, x, y, bgcolor, observer);
 	}
 
+	@Override
 	public boolean drawImage(Image img, int x, int y, ImageObserver observer) {
-		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (javaVersion>0 && javaVersion<=1.4f)) || testingOptimizations) {
+		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (JVM.javaVersion>0 && JVM.javaVersion<=1.4f)) || testingOptimizations) {
 			try {
 				g.setPaint(EMPTY_COLOR);
 				return g.drawImage(img, x, y, observer);
@@ -336,9 +364,10 @@ public class OptimizedGraphics2D extends Graphics2D {
 		return g.drawImage(img, x, y, observer);
 	}
 
+	@Override
 	public boolean drawImage(Image img, int x, int y, int width, int height,
 			Color bgcolor, ImageObserver observer) {
-		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (javaVersion>0 && javaVersion<=1.4f)) || testingOptimizations) {
+		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (JVM.javaVersion>0 && JVM.javaVersion<=1.4f)) || testingOptimizations) {
 			try {
 				g.setPaint(EMPTY_COLOR);
 				return g.drawImage(img, x, y, width, height, bgcolor, observer);
@@ -349,9 +378,10 @@ public class OptimizedGraphics2D extends Graphics2D {
 		return g.drawImage(img, x, y, width, height, bgcolor, observer);
 	}
 
+	@Override
 	public boolean drawImage(Image img, int x, int y, int width, int height,
 			ImageObserver observer) {
-		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (javaVersion>0 && javaVersion<=1.4f)) || testingOptimizations) {
+		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (JVM.javaVersion>0 && JVM.javaVersion<=1.4f)) || testingOptimizations) {
 			try {
 				g.setPaint(EMPTY_COLOR);
 				return g.drawImage(img, x, y, width, height, observer);
@@ -362,10 +392,11 @@ public class OptimizedGraphics2D extends Graphics2D {
 		return g.drawImage(img, x, y, width, height, observer);
 	}
 
+	@Override
 	public synchronized boolean drawImage(Image img, int dx1, int dy1, int dx2, int dy2,
 			int sx1, int sy1, int sx2, int sy2, Color bgcolor,
 			ImageObserver observer) {
-		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (javaVersion>0 && javaVersion<=1.4f)) || testingOptimizations) {
+		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (JVM.javaVersion>0 && JVM.javaVersion<=1.4f)) || testingOptimizations) {
 			try {
 				g.setPaint(EMPTY_COLOR);
 				return g.drawImage(img, dx1, dy1, dx2, dy2, sx1, sy1, sx2, sy2,
@@ -378,9 +409,10 @@ public class OptimizedGraphics2D extends Graphics2D {
 				bgcolor, observer);
 	}
 
+	@Override
 	public boolean drawImage(Image img, int dx1, int dy1, int dx2, int dy2,
 			int sx1, int sy1, int sx2, int sy2, ImageObserver observer) {
-		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (javaVersion>0 && javaVersion<=1.4f)) || testingOptimizations) {
+		if( ((mask & OPTIMIZE_IMAGE_BACKGROUND) > 0 && (JVM.javaVersion>0 && JVM.javaVersion<=1.4f)) || testingOptimizations) {
 			try {
 				g.setPaint(EMPTY_COLOR);
 				return g.drawImage(img, dx1, dy1, dx2, dy2, sx1, sy1, sx2, sy2,
@@ -393,60 +425,74 @@ public class OptimizedGraphics2D extends Graphics2D {
 				observer);
 	}
 
+	@Override
 	public void drawLine(int x1, int y1, int x2, int y2) {
 		g.drawLine(x1, y1, x2, y2);
 	}
 
+	@Override
 	public void drawOval(int x, int y, int width, int height) {
 		g.drawOval(x, y, width, height);
 	}
 
+	@Override
 	public void drawPolygon(int[] points, int[] points2, int points3) {
 		g.drawPolygon(points, points2, points3);
 	}
 
+	@Override
 	public void drawPolygon(Polygon p) {
 		g.drawPolygon(p);
 	}
 
+	@Override
 	public void drawPolyline(int[] points, int[] points2, int points3) {
 		g.drawPolyline(points, points2, points3);
 	}
 
+	@Override
 	public void drawRect(int x, int y, int width, int height) {
 		g.drawRect(x, y, width, height);
 	}
 
+	@Override
 	public void drawRenderableImage(RenderableImage img, AffineTransform xform) {
 		g.drawRenderableImage(img, xform);
 	}
 
+	@Override
 	public void drawRenderedImage(RenderedImage img, AffineTransform xform) {
 		g.drawRenderedImage(img, xform);
 	}
 
+	@Override
 	public void drawRoundRect(int x, int y, int width, int height,
 			int arcWidth, int arcHeight) {
 		g.drawRoundRect(x, y, width, height, arcWidth, arcHeight);
 	}
 
+	@Override
 	public void drawString(AttributedCharacterIterator iterator, float x,
 			float y) {
 		g.drawString(iterator, x, y);
 	}
 
+	@Override
 	public void drawString(AttributedCharacterIterator iterator, int x, int y) {
 		g.drawString(iterator, x, y);
 	}
 
+	@Override
 	public void drawString(String s, float x, float y) {
 		g.drawString(s, x, y);
 	}
 
+	@Override
 	public void drawString(String str, int x, int y) {
 		g.drawString(str, x, y);
 	}
 
+	@Override
 	public boolean equals(Object obj) {
 		if(obj==this)
 			return true;
@@ -467,15 +513,21 @@ public class OptimizedGraphics2D extends Graphics2D {
 	private Rectangle2D.Float innerClip = new Rectangle2D.Float();
 	private boolean innerClipDefined = false;
 	private boolean innerClipExists = false;
+	private AffineTransform innerTransform;
+	
 	private Rectangle2D.Float getInnerClipRect() {
 		if(innerClipDefined==false) {
 			Shape clip = getClip();
 			if(clip==null) {
 				innerClipExists = false;
 			} else {
-				innerClipExists = true;
-				ShapeBounds.getBounds(clip,innerClip);
-				innerClipDefined = true;
+				if(innerClip.width==0 || innerClip.height==0) {
+					innerClipExists = false;
+				} else {
+					innerClipExists = true;
+					ShapeBounds.getBounds(clip,innerClip);
+					innerClipDefined = true;
+				}
 			}
 		}
 		if(innerClipExists==false)
@@ -483,6 +535,7 @@ public class OptimizedGraphics2D extends Graphics2D {
 		return innerClip;
 	}
 	
+	@Override
 	public synchronized void fill(Shape s) {
 		if((mask & OPTIMIZE_CLIPPED_SHAPES) > 0) {
 			Rectangle2D clipRect = getInnerClipRect();
@@ -490,11 +543,99 @@ public class OptimizedGraphics2D extends Graphics2D {
 				return;
 			}
 		}
+		if(((mask & OPTIMIZE_QUARTZ_CUSTOM_PAINTS) > 0 && JVM.usingQuartz) || testingOptimizations) {
+			if(!(currentPaint instanceof Color)) {
+				fillPaintForQuartz(s);
+				return;
+			}
+		}
 		g.fill(s);
 	}
 
+	private static Rectangle2D rect2D;
+	private static BufferedImage scratchImage = null;
+	private static AffineTransform identityTransform = new AffineTransform();
+	
+	/** This is already called from within a synchronized block.
+	 * 
+	 * @param s
+	 */
+	private void fillPaintForQuartz(Shape s) {
+		if(rect2D==null)
+			rect2D = new Rectangle2D.Float();
+		
+		//TODO: uncomment this, and decide whether this method
+		//is appropriate to use
+		/*Rectangle clipBounds = getClipBounds();
+		if(clipBounds!=null) {
+			System.out.println("reducing");
+			s = Clipper.clipToRect(s, null, clipBounds);
+		}*/
+		AffineTransform myTransform = getTransform();
+		
+		ShapeBounds.getBounds(s, myTransform, rect2D);
+		Rectangle rect = rect2D.getBounds();
+		
+		if(rect.width==0 || rect.height==0)
+			return;
+		
+		RenderingHints oldHints = getRenderingHints();
+
+		PaintContext context = currentPaint.createContext(ColorModel.getRGBdefault(), 
+				rect, rect, getTransform(), oldHints);
+		
+		/** We MUST set the paint to black.
+		 * Otherwise this lets loose an insane memory leak
+		 * under Quartz.
+		 */
+		Paint oldPaint = currentPaint;
+		setPaint(Color.black);
+		setTransform(identityTransform);
+		
+		try {
+			BufferedImage scratchImage = getScratchImage(rect.width, rect.height);
+			WritableRaster paintRaster = (WritableRaster)context.getRaster(rect.x, rect.y, rect.width, rect.height);
+			BufferedImage newImage = new BufferedImage(context.getColorModel(), paintRaster, false, null);
+			Graphics2D g = scratchImage.createGraphics();
+			g.setComposite(AlphaComposite.Clear);
+			g.fillRect(0, 0, rect.width, rect.height);
+			g.translate(-rect.x, -rect.y);
+			g.transform( myTransform );
+			g.setColor(Color.black);
+			g.setComposite(AlphaComposite.SrcOver);
+			g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, 
+					RenderingHints.VALUE_ANTIALIAS_ON);
+			g.fill(s);
+			g.setTransform(identityTransform);
+			g.setComposite(AlphaComposite.SrcIn);
+			g.drawImage(newImage, 0, 0, null);
+			g.dispose();
+			drawImage(scratchImage, 
+					rect.x, rect.y, rect.x+rect.width, rect.y+rect.height, 
+					0, 0, rect.width, rect.height, 
+					null, null);
+			newImage.flush();
+		} finally {
+			context.dispose();
+			setTransform(myTransform);
+			setPaint(oldPaint);
+			setRenderingHints(oldHints);
+			if(scratchImage!=null)
+				scratchImage.flush();
+		}
+	}
+	
+	private static BufferedImage getScratchImage(int w,int h) {
+		if(scratchImage==null || w>scratchImage.getWidth() || h>scratchImage.getHeight()) {
+			int width = scratchImage==null ? w : Math.max(w, (scratchImage.getWidth()));
+			int height = scratchImage==null ? h : Math.max(h, (scratchImage.getHeight()));
+			scratchImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+		}
+		return scratchImage;
+	}
 	
 	private Arc2D scratchArc2D = null;
+	@Override
 	public synchronized void fillArc(int x, int y, int width, int height, int startAngle,
 			int endAngle) {
 		if((mask & OPTIMIZE_CLIPPED_SHAPES) > 0) {
@@ -508,6 +649,7 @@ public class OptimizedGraphics2D extends Graphics2D {
 	}
 
 	private Ellipse2D scratchEllipse = null;
+	@Override
 	public synchronized void fillOval(int x, int y, int width, int height) {
 		if((mask & OPTIMIZE_CLIPPED_SHAPES) > 0) {
 			if(scratchEllipse==null)
@@ -519,6 +661,7 @@ public class OptimizedGraphics2D extends Graphics2D {
 		g.fillOval(x, y, width, height);
 	}
 
+	@Override
 	public void fillPolygon(int[] xPoints, int[] yPoints, int nPoints) {
 		if((mask & OPTIMIZE_CLIPPED_SHAPES) > 0) {
 			Polygon p = new Polygon(xPoints,yPoints,nPoints);
@@ -528,6 +671,7 @@ public class OptimizedGraphics2D extends Graphics2D {
 		g.fillPolygon(xPoints, yPoints, nPoints);
 	}
 
+	@Override
 	public void fillPolygon(Polygon p) {
 		if((mask & OPTIMIZE_CLIPPED_SHAPES) > 0) {
 			fill(p);
@@ -537,6 +681,7 @@ public class OptimizedGraphics2D extends Graphics2D {
 	}
 
 	private Rectangle scratchRectangle = null;
+	@Override
 	public synchronized void fillRect(int x, int y, int width, int height) {
 		if((mask & OPTIMIZE_CLIPPED_SHAPES) > 0) {
 			if(scratchRectangle==null)
@@ -549,6 +694,7 @@ public class OptimizedGraphics2D extends Graphics2D {
 	}
 
 	private RoundRectangle2D scratchRoundRectangle2D = null;
+	@Override
 	public synchronized void fillRoundRect(int x, int y, int width, int height,
 			int arcWidth, int arcHeight) {
 		if((mask & OPTIMIZE_CLIPPED_SHAPES) > 0) {
@@ -561,22 +707,27 @@ public class OptimizedGraphics2D extends Graphics2D {
 		g.fillRoundRect(x, y, width, height, arcWidth, arcHeight);
 	}
 
+	@Override
 	public void finalize() {
 		g.finalize();
 	}
 
+	@Override
 	public Color getBackground() {
 		return g.getBackground();
 	}
 
+	@Override
 	public Shape getClip() {
 		return g.getClip();
 	}
 
+	@Override
 	public Rectangle getClipBounds() {
 		return getClipBounds(new Rectangle());
 	}
 
+	@Override
 	public Rectangle getClipBounds(Rectangle r) {
 		if(( mask & OPTIMIZE_CLIP_BOUNDS)> 0) {
 			Rectangle2D.Float clipRect = getInnerClipRect();
@@ -610,163 +761,215 @@ public class OptimizedGraphics2D extends Graphics2D {
 		return g.getClipBounds(r);
 	}
 
+	@SuppressWarnings("deprecation")
+	@Override
 	public Rectangle getClipRect() {
 		return g.getClipRect();
 	}
 
+	@Override
 	public Color getColor() {
 		return g.getColor();
 	}
 
+	@Override
 	public Composite getComposite() {
 		return g.getComposite();
 	}
 
+	@Override
 	public GraphicsConfiguration getDeviceConfiguration() {
 		return g.getDeviceConfiguration();
 	}
 
+	@Override
 	public Font getFont() {
 		return g.getFont();
 	}
 
+	@Override
 	public FontMetrics getFontMetrics() {
 		return g.getFontMetrics();
 	}
 
+	@Override
 	public FontMetrics getFontMetrics(Font f) {
 		return g.getFontMetrics(f);
 	}
 
+	@Override
 	public FontRenderContext getFontRenderContext() {
 		return g.getFontRenderContext();
 	}
 
+	@Override
 	public Paint getPaint() {
 		return g.getPaint();
 	}
 
+	@Override
 	public Object getRenderingHint(Key hintKey) {
 		return g.getRenderingHint(hintKey);
 	}
 
+	@Override
 	public RenderingHints getRenderingHints() {
 		return g.getRenderingHints();
 	}
 
+	@Override
 	public Stroke getStroke() {
 		return g.getStroke();
 	}
 
+	@Override
 	public AffineTransform getTransform() {
 		return g.getTransform();
 	}
 
+	@Override
 	public int hashCode() {
 		return g.hashCode();
 	}
 
+	@Override
 	public boolean hit(Rectangle rect, Shape s, boolean onStroke) {
 		return g.hit(rect, s, onStroke);
 	}
 
+	@Override
 	public boolean hitClip(int x, int y, int width, int height) {
 		return g.hitClip(x, y, width, height);
 	}
 
+	@Override
 	public synchronized void rotate(double theta, double x, double y) {
 		g.rotate(theta, x, y);
+		if(innerTransform!=null)
+			innerTransform.rotate(theta, x, y);
 		innerClipDefined = false;
 	}
 
+	@Override
 	public synchronized void rotate(double theta) {
 		g.rotate(theta);
+		if(innerTransform!=null)
+			innerTransform.rotate(theta);
 		innerClipDefined = false;
 	}
 
+	@Override
 	public synchronized void scale(double sx, double sy) {
 		g.scale(sx, sy);
+		if(innerTransform!=null)
+			innerTransform.scale(sx, sy);
 		innerClipDefined = false;
 	}
 
+	@Override
 	public void setBackground(Color color) {
 		g.setBackground(color);
 	}
 
+	@Override
 	public synchronized void setClip(int x, int y, int width, int height) {
 		g.setClip(x, y, width, height);
 		innerClipDefined = false;
 	}
 
+	@Override
 	public synchronized void setClip(Shape clip) {
 		g.setClip(clip);
 		innerClipDefined = false;
 	}
 
+	@Override
 	public void setColor(Color c) {
 		g.setColor(c);
 		currentPaint = c;
 	}
 
+	@Override
 	public void setComposite(Composite comp) {
 		g.setComposite(comp);
 	}
 
+	@Override
 	public void setFont(Font font) {
 		g.setFont(font);
 	}
 
+	@Override
 	public void setPaint(Paint paint) {
 		g.setPaint(paint);
 		currentPaint = paint;
 	}
 
+	@Override
 	public void setPaintMode() {
 		g.setPaintMode();
 	}
 
+	@Override
 	public void setRenderingHint(Key hintKey, Object hintValue) {
 		g.setRenderingHint(hintKey, hintValue);
 	}
 
-	public void setRenderingHints(Map hints) {
+	@Override
+	public void setRenderingHints(Map<?, ?> hints) {
 		g.setRenderingHints(hints);
 	}
 
+	@Override
 	public void setStroke(Stroke s) {
 		g.setStroke(s);
 	}
 
+	@Override
 	public synchronized void setTransform(AffineTransform Tx) {
 		g.setTransform(Tx);
+		innerTransform = null;
 		innerClipDefined = false;
 	}
 
+	@Override
 	public void setXORMode(Color c1) {
 		g.setXORMode(c1);
 	}
 
+	@Override
 	public synchronized void shear(double shx, double shy) {
 		g.shear(shx, shy);
+		if(innerTransform!=null)
+			innerTransform.shear(shx, shy);
 		innerClipDefined = false;
 	}
 
+	@Override
 	public String toString() {
 		return "OptimizedGraphics2D[ g = "+g.toString()+", mask = "+toString(mask)+"]";
 	}
 
+	@Override
 	public synchronized void transform(AffineTransform Tx) {
 		g.transform(Tx);
+		innerTransform = null;
 		innerClipDefined = false;
 	}
 
+	@Override
 	public synchronized void translate(double tx, double ty) {
 		g.translate(tx, ty);
+		if(innerTransform!=null)
+			innerTransform.translate(tx, ty);
 		innerClipDefined = false;
 	}
 
+	@Override
 	public synchronized void translate(int x, int y) {
 		g.translate(x, y);
+		if(innerTransform!=null)
+			innerTransform.translate(x, y);
 		innerClipDefined = false;
 	}
 	

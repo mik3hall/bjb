@@ -1,9 +1,9 @@
 /*
  * @(#)MutableInteger.java
  *
- * $Date: 2009-02-19 23:34:41 -0800 (Thu, 19 Feb 2009) $
+ * $Date: 2012-07-29 19:48:43 -0500 (Sun, 29 Jul 2012) $
  *
- * Copyright (c) 2009 by Jeremy Wood.
+ * Copyright (c) 2012 by Jeremy Wood.
  * All rights reserved.
  *
  * The copyright of this software is owned by Jeremy Wood. 
@@ -12,59 +12,79 @@
  * Jeremy Wood. For details see accompanying license terms.
  * 
  * This software is probably, but not necessarily, discussed here:
- * http://javagraphics.blogspot.com/
+ * http://javagraphics.java.net/
  * 
- * And the latest version should be available here:
- * https://javagraphics.dev.java.net/
+ * That site should also contain the most recent official version
+ * of this software.  (See the SVN repository for more details.)
  */
 package com.bric.math;
 
-/** Similar to <code>java.lang.Integer</code>, except this object
- * is mutable.
- * <P>This can be very handy when you want to use integers
- * as keys in a Hashtable: constantly creating new integer wrappers is very
- * wasteful, but if you create 1 mutable integer wrapper and change its
- * value every time you need it (in a safe synchronized environment) this
- * can really save a lot of memory allocation.  In same instances.
- *
+
+/**
+ * This <code>Number</code> can change value, so for operations that need to
+ * be computed millions of times, recycling 1 object will save a lot of memory
+ * allocation.
  */
-public class MutableInteger extends Number {
+public class MutableInteger extends Number implements Comparable<Number> {
 	private static final long serialVersionUID = 1L;
-	
-	public int value = 0;
-	
-	public MutableInteger(int value) {
-		this.value = value;
+
+	public int value;
+
+	public MutableInteger() {
 	}
 
+	public MutableInteger(int v) {
+		this.value = v;
+	}
+
+	public int compareTo(Number n) {
+		int i = n.intValue();
+		if(value==i) return 0;
+		if(value<i) return -1;
+		return 1;
+	}
+
+	@Override
+	public String toString() {
+		return Integer.toString(value);
+	}
+
+	@Override
+	public Object clone() {
+		return new MutableInteger(value);
+	}
+
+	@Override
+	public boolean equals(Object t) {
+		if (t instanceof Number) {
+			return ((Number) t).intValue() == value;
+		}
+		return false;
+	}
+
+	@Override
+	public int hashCode() {
+		return intValue();
+	}
+
+	@Override
 	public double doubleValue() {
 		return value;
 	}
 
+	@Override
 	public float floatValue() {
 		return value;
 	}
 
+	@Override
 	public int intValue() {
 		return value;
 	}
 
+	@Override
 	public long longValue() {
 		return value;
 	}
-	
-	public int hashCode() {
-		return value;
-	}
 
-	public boolean equals(Object obj) {
-		if(obj==this) return true;
-		if(obj instanceof MutableInteger) {
-			return ((MutableInteger)obj).value==value;
-		}
-		if(obj instanceof Number) {
-			return ((Number)obj).intValue()==value;
-		}
-		return false;
-	}
 }

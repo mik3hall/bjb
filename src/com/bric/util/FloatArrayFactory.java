@@ -1,9 +1,9 @@
 /*
  * @(#)FloatArrayFactory.java
  *
- * $Date: 2009-06-13 17:18:17 -0500 (Sat, 13 Jun 2009) $
+ * $Date: 2012-07-03 01:10:05 -0500 (Tue, 03 Jul 2012) $
  *
- * Copyright (c) 2009 by Jeremy Wood.
+ * Copyright (c) 2011 by Jeremy Wood.
  * All rights reserved.
  *
  * The copyright of this software is owned by Jeremy Wood. 
@@ -12,10 +12,10 @@
  * Jeremy Wood. For details see accompanying license terms.
  * 
  * This software is probably, but not necessarily, discussed here:
- * http://javagraphics.blogspot.com/
+ * http://javagraphics.java.net/
  * 
- * And the latest version should be available here:
- * https://javagraphics.dev.java.net/
+ * That site should also contain the most recent official version
+ * of this software.  (See the SVN repository for more details.)
  */
 package com.bric.util;
 
@@ -45,25 +45,26 @@ public class FloatArrayFactory {
 		return globalFactory;
 	}
 	
-	private Map map = createMap();
+	private Map<Number, Stack<float[]>> map = createMap();
 	
-	private static Map createMap() {
+	@SuppressWarnings("unchecked")
+	private static Map<Number, Stack<float[]>> createMap() {
 		try {
 			//break this up into two strings for the JarWriter
 			//If the whole name is listed, then the JarWriter
 			//will bundle the trove jar automatically...
-			Class troveMap = Class.forName("gnu."+"trove.THashMap");
-			Constructor[] constructors = troveMap.getConstructors();
+			Class<?> troveMap = Class.forName("gnu."+"trove.THashMap");
+			Constructor<?>[] constructors = troveMap.getConstructors();
 			for(int a = 0; a<constructors.length; a++) {
 				if(constructors[a].getParameterTypes().length==0)
-					return (Map)constructors[a].newInstance(new Object[] {});
+					return (Map<Number, Stack<float[]>>)constructors[a].newInstance(new Object[] {});
 			}
 		} catch(Throwable e) {
 			//in addition to the expected exceptions, consider
 			//UnsupportedClassVersionErrors, and other weirdnesses.
 		}
 		
-		return new Hashtable();
+		return new Hashtable<Number, Stack<float[]>>();
 	}
 	
 	private MutableInteger key = new MutableInteger(0);
@@ -76,19 +77,19 @@ public class FloatArrayFactory {
 	 * @return a float array of the size indicated.
 	 */
 	public float[] getArray(int size) {
-		Stack stack;
+		Stack<float[]> stack;
 		synchronized(key) {
 			key.value = size;
-			stack = (Stack)map.get(key);
+			stack = map.get(key);
 			if(stack==null) {
-				stack = new Stack();
+				stack = new Stack<float[]>();
 				map.put(new MutableInteger(size),stack);
 			}
 		}
 		if(stack.size()==0) {
 			return new float[size];
 		}
-		return (float[])stack.pop();
+		return stack.pop();
 	}
 	
 	/** Stores an array for future use.
@@ -103,12 +104,12 @@ public class FloatArrayFactory {
 	 * needed later.
 	 */
 	public void putArray(float[] array) {
-		Stack stack;
+		Stack<float[]> stack;
 		synchronized(key) {
 			key.value = array.length;
-			stack = (Stack)map.get(key);
+			stack = map.get(key);
 			if(stack==null) {
-				stack = new Stack();
+				stack = new Stack<float[]>();
 				map.put(new MutableInteger(array.length),stack);
 			}
 		}

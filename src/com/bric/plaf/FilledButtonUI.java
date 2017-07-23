@@ -1,9 +1,28 @@
+/*
+ * @(#)FilledButtonUI.java
+ *
+ * $Date: 2012-10-01 03:23:24 -0500 (Mon, 01 Oct 2012) $
+ *
+ * Copyright (c) 2011 by Jeremy Wood.
+ * All rights reserved.
+ *
+ * The copyright of this software is owned by Jeremy Wood. 
+ * You may not use, copy or modify this software, except in  
+ * accordance with the license agreement you entered into with  
+ * Jeremy Wood. For details see accompanying license terms.
+ * 
+ * This software is probably, but not necessarily, discussed here:
+ * http://javagraphics.java.net/
+ * 
+ * That site should also contain the most recent official version
+ * of this software.  (See the SVN repository for more details.)
+ */
 package com.bric.plaf;
 
 import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
-import java.awt.Container;
+import java.awt.Composite;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -25,6 +44,7 @@ import java.awt.font.FontRenderContext;
 import java.awt.font.GlyphVector;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.GeneralPath;
+import java.awt.geom.Path2D;
 import java.awt.geom.Rectangle2D;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
@@ -44,10 +64,11 @@ import javax.swing.plaf.ButtonUI;
 import javax.swing.plaf.basic.BasicButtonListener;
 import javax.swing.plaf.basic.BasicGraphicsUtils;
 
-import com.bric.awt.PaintUtils;
+import org.bjb.BlackJackApp;
+
 import com.bric.geom.ShapeBounds;
-import com.bric.geom.TransformUtils;
 import com.bric.graphics.OptimizedGraphics2D;
+import com.bric.plaf.UIEffect.State;
 
 /** A ButtonUI that includes an enclosed filled shape.
  * <P>This <code>ButtonUI</code> supports several
@@ -70,7 +91,7 @@ import com.bric.graphics.OptimizedGraphics2D;
  * <P>This layout is not tested with HTML-rendered text.
  * 
  */
-public abstract class FilledButtonUI extends ButtonUI {
+public abstract class FilledButtonUI extends ButtonUI implements PositionConstants {
 
 	/** Basic information about the geometry/layout of buttons.
 	 * The members are final, and should be redefined instead
@@ -86,16 +107,10 @@ public abstract class FilledButtonUI extends ButtonUI {
 		/** The button this information relates to. */
 		final AbstractButton button;
 
-		/** The path used to paint the border. */
-		final protected GeneralPath edge = new GeneralPath();
-
-		/** A list of <code>UIEffects</code>, in the order
+		/** A list of <code>PaintUIEffect</code>, in the order
 		 * they should be rendered.
 		 */
-		final protected Vector effects = new Vector();
-
-		/** The area that makes up this button. */
-		final protected GeneralPath fill = new GeneralPath();
+		final protected Vector<PaintUIEffect> effects = new Vector<PaintUIEffect>();
 
 		final protected Rectangle fillBounds = new Rectangle();
 
@@ -110,7 +125,10 @@ public abstract class FilledButtonUI extends ButtonUI {
 
 		/** Completely untested. */
 		final protected Rectangle viewRect = new Rectangle();
-
+		
+		/** The area that makes up this button. */
+		final protected GeneralPath fill = new GeneralPath();
+		
 		public ButtonInfo(AbstractButton b,FilledButtonUI filledButtonUI) {
 			button = b;
 			ui = filledButtonUI;
@@ -118,6 +136,7 @@ public abstract class FilledButtonUI extends ButtonUI {
 			basicListener = new BasicButtonListener(button) {
 				Timer focusBlinker;
 
+				@Override
 				public void focusGained(FocusEvent e) {
 					super.focusGained(e);
 					if(focusBlinker==null) {
@@ -140,13 +159,17 @@ public abstract class FilledButtonUI extends ButtonUI {
 					button.putClientProperty(FOCUS_PAINTED, Boolean.TRUE);
 					focusBlinker.start();
 				}
+				@Override
 				public void focusLost(FocusEvent e) {
 					super.focusLost(e);
+//					button.setBackground(Color.white);
 					button.putClientProperty(SPACEBAR_PRESSED, Boolean.FALSE);
-					focusBlinker.stop();
-					repaint(button);
+					if(focusBlinker!=null)
+						focusBlinker.stop();
+					button.repaint();
 				}
 
+				@Override
 				public void propertyChange(PropertyChangeEvent evt) {
 					super.propertyChange(evt);
 					if(evt.getPropertyName().equals(AbstractButton.CONTENT_AREA_FILLED_CHANGED_PROPERTY)) {
@@ -156,13 +179,13 @@ public abstract class FilledButtonUI extends ButtonUI {
 							button.setOpaque(false);
 						}
 					} else if(evt.getPropertyName().equals(SPACEBAR_PRESSED)) {
-						repaint(button);
+						button.repaint();
 					} else if(evt.getPropertyName().equals(FOCUS_PAINTED)) {
-						repaint(button);
+						button.repaint();
 					} else if(evt.getPropertyName().equals("text") ||
 							evt.getPropertyName().equals("icon")) {
 						ui.updateLayout(button, getButtonInfo(button));
-						repaint(button);
+						button.repaint();
 					}
 				}
 			};
@@ -173,27 +196,7 @@ public abstract class FilledButtonUI extends ButtonUI {
 		}
 	}
 
-	/** This paints 1 pixel outside the button bounds.  This
-	 * is an experimental fix to tackle a repaint bug on Mac.
-	 */
-	public static void repaint(AbstractButton button) {
-		/** A bug on Mac lets the lines immediately
-		 * next to this button get painted funky
-		 * (usually with focus residue):
-		 * so when we lose focus let's be sure
-		 * to repaint those, too.
-		 */
-		Container parent = button.getParent();
-		if(parent!=null && false) {
-			Rectangle bounds = button.getBounds();
-			parent.repaint(bounds.x-1, bounds.y-1, bounds.width+2, bounds.height+2);
-		} else if(parent!=null) {
-			Rectangle bounds = button.getBounds();
-			parent.repaint(bounds.x, bounds.y, bounds.width, bounds.height);
-		}
-	}
-
-	private static Hashtable ascentTable = new Hashtable();
+	private static Hashtable<Font, Integer> ascentTable = new Hashtable<Font, Integer>();
 
 	/** A possible value for the VERTICAL_POSITION client property. */
 	public static final String BOTTOM = "bottom";
@@ -213,7 +216,7 @@ public abstract class FilledButtonUI extends ButtonUI {
 			AbstractButton button = (AbstractButton)e.getSource();
 			ButtonInfo info = getButtonInfo(button);
 			info.ui.updateLayout(button,info);
-			repaint(button);
+			button.repaint();
 		}
 
 		public void componentShown(ComponentEvent e) {
@@ -292,20 +295,7 @@ public abstract class FilledButtonUI extends ButtonUI {
 	 * or <code>paintForeground()</code>.
 	 */
 	public static final int PAINT_NO_FOCUS = 0;
-	/** A constant used to indicate the horizontal position of a button. */
-	protected static final int POS_BOTTOM = 5;
-
-
-	/** A constant used to indicate the horizontal position of a button. */
-	protected static final int POS_LEFT = 0;
-	/** A constant used to indicate the horizontal or vertical position of a button. */
-	protected static final int POS_MIDDLE = 1;
-	/** A constant used to indicate the horizontal or vertical position of a button. */
-	protected static final int POS_ONLY = 3;
-	/** A constant used to indicate the horizontal position of a button. */
-	protected static final int POS_RIGHT = 2;
-	/** A constant used to indicate the horizontal position of a button. */
-	protected static final int POS_TOP = 4;
+	
 	/** When the position properties change in a button, we need to update the UI. */
 	protected static PropertyChangeListener positionAndShapeListener = new PropertyChangeListener() {
 		public void propertyChange(PropertyChangeEvent evt) {
@@ -320,7 +310,7 @@ public abstract class FilledButtonUI extends ButtonUI {
 					FilledButtonUI s = (FilledButtonUI)ui;
 					s.updateLayout(button, getButtonInfo(button));
 					button.invalidate();
-					repaint(button);
+					button.repaint();
 				}
 			}
 		}
@@ -351,6 +341,124 @@ public abstract class FilledButtonUI extends ButtonUI {
 		return i;
 	}
 
+	protected void updateLayout(AbstractButton button,
+			ButtonInfo buttonInfo) {
+		Shape customShape = (Shape)button.getClientProperty(SHAPE);
+		int width = button.getWidth();
+		int height = button.getHeight();
+		int horizontalPosition = getHorizontalPosition(button);
+		int verticalPosition = getVerticalPosition(button);
+		
+		String key = width+" "+height+" "+horizontalPosition+" "+verticalPosition;
+		button.putClientProperty("FilledButtonUI.validationKey", key);
+		
+		int dx = 0;
+		int dy = 0;
+
+		if(getFocusPainting(button)==PAINT_FOCUS_OUTSIDE || 
+				getFocusPainting(button)==PAINT_FOCUS_BOTH) {
+			if(horizontalPosition==POS_LEFT || horizontalPosition==POS_ONLY) {
+				dx+=focusSize;
+				width-=focusSize;
+			}
+			if(horizontalPosition==POS_RIGHT || horizontalPosition==POS_ONLY) {
+				width-=focusSize;
+			}
+			if(verticalPosition==POS_TOP || verticalPosition==POS_ONLY) {
+				dy+=focusSize;
+				height-=focusSize;
+			}
+			if(verticalPosition==POS_BOTTOM || verticalPosition==POS_ONLY) {
+				height-=focusSize;
+			}
+		} else {
+			if((verticalPosition==POS_BOTTOM || verticalPosition==POS_ONLY) &&
+					fill.getShadowHighlight(button)!=null) {
+				height--;
+			}
+		}
+
+		ButtonInfo info = getButtonInfo(button);
+		
+		shape.getShape(info.fill, width, height, 
+				horizontalPosition, verticalPosition, 
+				customShape);
+		
+		AffineTransform translation = AffineTransform.getTranslateInstance(dx, dy);
+		info.fill.transform(translation);
+		
+		Font font = button.getFont();
+		if(font==null) font = new Font("Default",0,12);
+		FontMetrics fm = button.getFontMetrics(font);
+
+		info.viewRect.x = info.viewRect.y = info.textRect.x = info.textRect.y = info.textRect.width = info.textRect.height = 0;
+		info.iconRect.x = info.iconRect.y = info.iconRect.width = info.iconRect.height = 0;
+		info.viewRect.width = Short.MAX_VALUE;
+		info.viewRect.height = Short.MAX_VALUE;
+
+		SwingUtilities.layoutCompoundLabel(fm, 
+				button.getText(), 
+				button.getIcon(), 
+				button.getVerticalAlignment(), 
+				button.getHorizontalAlignment(), 
+				button.getVerticalTextPosition(), 
+				button.getHorizontalTextPosition(), 
+				info.viewRect, 
+				info.iconRect, 
+				info.textRect,
+				button.getIconTextGap());
+
+		Insets textInsets = getTextPadding();
+		Insets iconInsets = getIconPadding();
+
+		Rectangle tempTextRect = new Rectangle(info.textRect);
+		Rectangle tempIconRect = new Rectangle(info.iconRect);
+		if(info.textRect.width>0) {
+			tempTextRect.y -= textInsets.top;
+			tempTextRect.x -= textInsets.left;
+			tempTextRect.width += textInsets.left+textInsets.right;
+			tempTextRect.height += textInsets.top+textInsets.bottom;
+		}
+		if(info.iconRect.width>0) {
+			tempIconRect.y -= iconInsets.top;
+			tempIconRect.x -= iconInsets.left;
+			tempIconRect.width += iconInsets.left+iconInsets.right;
+			tempIconRect.height += iconInsets.top+iconInsets.bottom;
+		}
+
+		Rectangle sum = getSum(new Rectangle[] { tempIconRect, tempTextRect});
+
+		Insets padding = getContentInsets(button);
+
+		float centerX = ((button.getWidth()-padding.left-padding.right))/2f;
+		float centerY = ((button.getHeight()-padding.top-padding.bottom))/2f;
+
+		float shiftX = centerX-(sum.width)/2f-sum.x+padding.left;
+		float shiftY = centerY-(sum.height)/2f-sum.y+padding.top;
+
+		if(customShape==null) {
+			if(button.getVerticalAlignment()==SwingConstants.CENTER &&
+					button.getVerticalTextPosition()==SwingConstants.CENTER &&
+					info.textRect.width>0) {
+				int unusedAscent = getUnusedAscent(fm,font);
+				int ascent = fm.getAscent()-unusedAscent;
+	
+				shiftY = (int)(-sum.y+centerY-ascent/2-unusedAscent+padding.top-textInsets.top);
+			}
+		}
+		
+		info.iconRect.setFrame( info.iconRect.x + shiftX, 
+				info.iconRect.y + shiftY, 
+				info.iconRect.width, 
+				info.iconRect.height );
+		info.textRect.setRect( (int)(info.textRect.x + shiftX+.5f), 
+				(int)(info.textRect.y + shiftY+.5f), 
+				info.textRect.width, 
+				info.textRect.height);
+		
+		info.updateFillBounds();
+	}
+
 	/** This looks at the client properties "JButton.segmentPosition"
 	 * and HORIZONTAL_POSITION to return on the constants in this
 	 * class (LEFT_POS, POS_MIDDLE, RIGHT_POS or POS_ONLY).
@@ -358,6 +466,9 @@ public abstract class FilledButtonUI extends ButtonUI {
 	 * this context a position doesn't make sense.
 	 */
 	protected static int getHorizontalPosition(JComponent b) {
+		if(b==null)
+			return POS_ONLY;
+		
 		Shape shape = (Shape)b.getClientProperty(SHAPE);
 		if(shape!=null) {
 			return POS_ONLY;
@@ -401,7 +512,7 @@ public abstract class FilledButtonUI extends ButtonUI {
 	 * pixels taller than it really is.
 	 */
 	private static int getUnusedAscent(FontMetrics fm,Font font) {
-		Integer value = (Integer)ascentTable.get(font);
+		Integer value = ascentTable.get(font);
 		if(value==null) {
 			int recordedAscent = fm.getAscent();	
 			FontRenderContext frc = new FontRenderContext(new AffineTransform(), false, false);
@@ -420,6 +531,9 @@ public abstract class FilledButtonUI extends ButtonUI {
 	 * this context a position doesn't make sense.
 	 */
 	protected static int getVerticalPosition(JComponent b) {
+		if(b==null)
+			return POS_ONLY;
+		
 		Shape shape = (Shape)b.getClientProperty(SHAPE);
 		if(shape!=null) {
 			return POS_ONLY;
@@ -445,7 +559,6 @@ public abstract class FilledButtonUI extends ButtonUI {
 	 * and the mouse was interacting with this button: the two
 	 * agents (the KeyListener and the MouseListener) would
 	 * constantly be overriding the other's work.
-	 * @return
 	 */
 	protected static boolean isSpacebarPressed(AbstractButton button) {
 		Boolean b = (Boolean)button.getClientProperty(SPACEBAR_PRESSED);
@@ -456,56 +569,22 @@ public abstract class FilledButtonUI extends ButtonUI {
 	/** The <code>ButtonFill</code> that controls the main paints
 	 * used in this L&F.
 	 */
-	protected final ButtonFill buttonFill;
+	protected final ButtonFill fill;
 
 	/** The number of pixels thick the focus ring should be. */
 	protected int focusSize = 3;
 
-	protected final int maxTopRightRadius, maxTopLeftRadius, maxBottomLeftRadius, maxBottomRightRadius;
-
-
-	protected final int prefTopRightRadius, prefTopLeftRadius, prefBottomLeftRadius, prefBottomRightRadius;
+	/** The ButtonShape responsible for the shape of this button. */
+	protected final ButtonShape shape;
 
 	/** Creates a new <code>FilledButtonUI</code>.
-	 * 
-	 * @param buttonFill the <code>ButtonFill</code> to use for this UI.
-	 * @param preferredRadius the preferred radius for corners
-	 * @param maxRadius the maximum radius for corners
-	 */
-	public FilledButtonUI(ButtonFill buttonFill,int preferredRadius,int maxRadius) {
-		this(buttonFill, preferredRadius, preferredRadius, preferredRadius, preferredRadius,
-				maxRadius, maxRadius, maxRadius, maxRadius);
-	}
-
-	/** Creates a new <code>FilledButtonUI</code>.
-	 * <P>Most of the time you'll want the other, simpler constructor.
-	 * This one is used when you want to different corner sizes for
-	 * different corners.
 	 * 
 	 * @param buttonFill the <code>ButtonFill</code> this UI uses.
-	 * @param prefTopLeftRadius the preferred top left radius
-	 * @param prefBottomLeftRadius the preferred bottom left radius
-	 * @param prefBottomRightRadius the preferred top right radius
-	 * @param prefTopRightRadius the preferred bottom right radius
-	 * @param maxTopLeftRadius the maximum top left radius
-	 * @param maxBottomLeftRadius the maximum bottom left radius
-	 * @param maxBottomRightRadius the maximum top right radius
-	 * @param maxTopRightRadius the maximum bottom right radius
+	 * @param buttonShape the <code>ButtonShape</code> this UI uses.
 	 */
-	public FilledButtonUI(ButtonFill buttonFill,
-			int prefTopLeftRadius,int prefBottomLeftRadius,int prefBottomRightRadius,int prefTopRightRadius,
-			int maxTopLeftRadius,int maxBottomLeftRadius,int maxBottomRightRadius,int maxTopRightRadius) {
-		this.prefTopLeftRadius = prefTopLeftRadius;
-		this.prefBottomLeftRadius = prefBottomLeftRadius;
-		this.prefBottomRightRadius = prefBottomRightRadius;
-		this.prefTopRightRadius = prefTopRightRadius;
-
-		this.maxTopLeftRadius = maxTopLeftRadius;
-		this.maxBottomLeftRadius = maxBottomLeftRadius;
-		this.maxBottomRightRadius = maxBottomRightRadius;
-		this.maxTopRightRadius = maxTopRightRadius;
-
-		this.buttonFill = buttonFill;
+	public FilledButtonUI(ButtonFill buttonFill,ButtonShape buttonShape) {
+		shape = buttonShape;
+		fill = buttonFill;
 	}
 
 	/** The padding between the "content area" (that is, the icon rect
@@ -516,7 +595,7 @@ public abstract class FilledButtonUI extends ButtonUI {
 		int horizontalPosition = getHorizontalPosition(button);
 		int verticalPosition = getVerticalPosition(button);
 
-		Insets i = new Insets(1,1,1,1);
+		Insets i = new Insets(0,0,0,0);
 		if(getFocusPainting(button)==PAINT_FOCUS_OUTSIDE || 
 				getFocusPainting(button)==PAINT_FOCUS_BOTH) {
 			if(horizontalPosition==POS_LEFT || horizontalPosition==POS_ONLY) {
@@ -532,17 +611,18 @@ public abstract class FilledButtonUI extends ButtonUI {
 				i.bottom += focusSize;
 			}
 		} else {
-			if(buttonFill.getShadowHighlight(button)!=null && (verticalPosition==POS_BOTTOM || verticalPosition==POS_ONLY)) {
+			if(fill.getShadowHighlight(button)!=null && 
+					(verticalPosition==POS_BOTTOM || verticalPosition==POS_ONLY)) {
 				i.bottom++;
 			}
 		}
 		return i;
 	}
 
-	/** Returns the list of <code>UIEffects</code> this button
+	/** Returns the list of <code>PaintUIEffect</code> this button
 	 * is rendering.
 	 */
-	public List getEffects(AbstractButton button) {
+	public List<PaintUIEffect> getEffects(AbstractButton button) {
 		ButtonInfo info = getButtonInfo(button);
 		return info.effects;
 	}
@@ -615,15 +695,17 @@ public abstract class FilledButtonUI extends ButtonUI {
 		return new Insets(2,3,2,3);
 	}
 
-	/** By default this returns a very very large Dimension.
-	 * In theory these buttons will have a well-defined preferred size,
-	 * but can scale upwards to any necessary size.
+	/** This returns the preferred size.
 	 */
-	public Dimension getMaximumSize(JComponent c) {
-		return new Dimension(Integer.MAX_VALUE/2, Integer.MAX_VALUE/2);
+	@Override
+	public Dimension getMaximumSize(JComponent jc) {
+		//if this method returns
+		//return new Dimension(Integer.MAX_VALUE/2, Integer.MAX_VALUE/2);
+		return getPreferredSize( jc );
 	}
 
 	/** Returns the preferred size. */
+	@Override
 	public Dimension getMinimumSize(JComponent jc) {
 		return getPreferredSize( jc );
 	}
@@ -640,6 +722,7 @@ public abstract class FilledButtonUI extends ButtonUI {
 	}
 
 	/** Calculates the preferred size of this button and UI. */
+	@Override
 	public Dimension getPreferredSize(JComponent c) {
 		AbstractButton button = (AbstractButton)c;
 		ButtonCluster cluster = ButtonCluster.getCluster(button);
@@ -693,26 +776,35 @@ public abstract class FilledButtonUI extends ButtonUI {
 
 		Insets padding = getContentInsets(button);
 		
-		Shape shape = (Shape)button.getClientProperty(SHAPE);
-		
-		if(shape==null) {
+		Shape customShape = (Shape)button.getClientProperty(SHAPE);
+
+		if(customShape==null) {
 			int minHeight = getPreferredHeight();
 			if(sum.height<minHeight)
 				sum.height = minHeight;
-	
-			int leftSide = Math.max(prefTopLeftRadius,prefBottomLeftRadius);
-			int rightSide = Math.max(prefTopRightRadius,prefBottomRightRadius);
-	
-			return new Dimension(sum.width+leftSide+rightSide+padding.left+padding.right,
-					sum.height+padding.top+padding.bottom);
-		} else {
-			GeneralPath resizedShape = findShapeToFitRectangle(shape, sum.width, sum.height);
-			Rectangle2D bounds = ShapeBounds.getBounds(resizedShape);
-			return new Dimension(
-					(int)( bounds.getWidth()+padding.left+padding.right+.99999),
-					(int)( bounds.getHeight()+padding.top+padding.bottom+.99999)
-			);
 		}
+		
+		int horizontalPosition = getHorizontalPosition(button);
+		int verticalPosition = getVerticalPosition(button);
+		Dimension size = shape.getPreferredSize(null, sum.width, sum.height, padding, customShape);
+		
+		if(customShape==null) {
+			int focus = getFocusPainting(button);
+			if(focus==PAINT_FOCUS_OUTSIDE || focus==PAINT_FOCUS_BOTH) {
+				if(horizontalPosition==POS_ONLY) {
+					size.width += 2*focusSize;
+				} else if(horizontalPosition!=POS_MIDDLE) {
+					size.width += focusSize;
+				}
+				if(verticalPosition==POS_ONLY) {
+					size.height += 2*focusSize;
+				} else if(horizontalPosition!=POS_MIDDLE) {
+					size.height += focusSize;
+				}
+			}
+		}
+		
+		return size;
 	}
 	
 	
@@ -753,31 +845,6 @@ public abstract class FilledButtonUI extends ButtonUI {
 		Rectangle sum = getSum(new Rectangle[] {scratchIconRect, scratchTextRect});
 		return new Dimension(sum.width, sum.height);
 	}
-	
-	private static GeneralPath findShapeToFitRectangle(Shape originalShape,int w,int h) {
-		GeneralPath newShape = new GeneralPath();
-		Rectangle2D rect = new Rectangle2D.Float();
-		ShapeBounds.getBounds(originalShape,rect);
-		double scale = Math.min( ((double)w)/rect.getWidth(), ((double)h)/rect.getHeight() );
-		AffineTransform transform = new AffineTransform();
-		while(true) {
-			newShape.reset();
-			newShape.append(originalShape, true);
-			transform.setToScale(scale, scale);
-			newShape.transform(transform);
-			ShapeBounds.getBounds(newShape, rect);
-			
-			if(newShape.contains(
-					rect.getX()+rect.getWidth()/2-w/2,
-					rect.getY()+rect.getHeight()/2-h/2,
-					w, h
-					)) {
-				return newShape;
-			}
-			
-			scale += .01;
-		}
-	}
 
 	/** This returns the filled shape used to draw this
 	 * button.  This returns the <i>original</i> shape -- not
@@ -803,6 +870,7 @@ public abstract class FilledButtonUI extends ButtonUI {
 		return new Insets(2,4,2,4);
 	}
 
+	@Override
 	public void installUI(JComponent c) {
 		AbstractButton button = (AbstractButton)c;
 
@@ -824,7 +892,7 @@ public abstract class FilledButtonUI extends ButtonUI {
 		button.setRolloverEnabled(true);
 		
 		if(button.getIcon()!=null) {
-			Font font = (Font)UIManager.getFont("IconButton.font");
+			Font font = UIManager.getFont("IconButton.font");
 			if(font!=null)
 				button.setFont(font); //miniature-ish
 		}
@@ -862,6 +930,21 @@ public abstract class FilledButtonUI extends ButtonUI {
 
 		return false;
 	}
+	
+	protected Composite getComposite(AbstractButton button) {
+		Color flashColor = (Color)button.getClientProperty("flash");
+		if (flashColor != null) 
+			return SRC_OVER_TRANSLUCENT;
+		if (org.bjb.Preferences.isDefaultButtons() && ((javax.swing.JButton)button).isDefaultButton()) 
+			return SRC_OVER_TRANSLUCENT;
+		else return AlphaComposite.SrcOver;
+		/*
+			if(button.isEnabled()==false) {
+				return SRC_OVER_TRANSLUCENT;
+			}
+			return AlphaComposite.SrcOver;
+		*/
+	}
 
 	/** This calls the other relevant
 	 * <code>paint...()</code> methods in this object.
@@ -878,12 +961,13 @@ public abstract class FilledButtonUI extends ButtonUI {
 	 * <LI><code>paintEffects(g,true)</code></LI>
 	 * 
 	 */
+	@Override
 	public void paint(Graphics g0, JComponent c) {
 		AbstractButton button = (AbstractButton)c;
 
 		if(isLayoutValid(button)==false)
 			updateLayout(button, getButtonInfo(button));
-
+		
 		if(button.isOpaque()) {
 			g0.setColor(button.getBackground());
 			g0.fillRect(0,0,button.getWidth(), button.getHeight());
@@ -891,18 +975,16 @@ public abstract class FilledButtonUI extends ButtonUI {
 
 		Graphics2D g = new OptimizedGraphics2D((Graphics2D)g0);
 		
-		if(button.isEnabled()==false) {
-			g.setComposite(SRC_OVER_TRANSLUCENT);
-		}
+		g.setComposite(getComposite(button));
 
 		ButtonInfo info = getButtonInfo(button);
 
-		Color highlight = buttonFill.getShadowHighlight(button);
+		Color highlight = fill.getShadowHighlight(button);
 		if(highlight!=null && button.isBorderPainted()) {
 			g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 			g.translate(0,1);
 			g.setColor(highlight);
-			g.draw(info.edge);
+			g.draw(info.fill);
 			g.translate(0,-1);
 		}
 
@@ -922,18 +1004,18 @@ public abstract class FilledButtonUI extends ButtonUI {
 			if(isFillOpaque()) {
 				//the opaque fill will overwrite the inner part of
 				//this stroke...
-				PaintUtils.paintFocus(g, info.fill, focusSize);
+				PlafPaintUtils.paintFocus(g, info.fill, focusSize);
 			} else {
 				//this still has some rendering quirks in
 				//Quartz (remove the clipping to study closely)
 				//... but other than the top horizontal & vertical
 				//line it's OK.  And even those are ... partly there.
 				Graphics2D focusG = (Graphics2D)g.create();
-				GeneralPath outsideClip = new GeneralPath(GeneralPath.WIND_EVEN_ODD);
+				GeneralPath outsideClip = new GeneralPath(Path2D.WIND_EVEN_ODD);
 				outsideClip.append(new Rectangle(0,0,button.getWidth(),button.getHeight()),false);
 				outsideClip.append(info.fill, false);
 				focusG.clip(outsideClip);
-				PaintUtils.paintFocus(focusG, info.fill, focusSize);
+				PlafPaintUtils.paintFocus(focusG, info.fill, focusSize);
 				focusG.dispose();
 			}
 		}
@@ -946,12 +1028,12 @@ public abstract class FilledButtonUI extends ButtonUI {
 		if( focus==PAINT_FOCUS_INSIDE ) {
 			Graphics2D focusG = (Graphics2D)g.create();
 			focusG.clip(info.fill);
-			PaintUtils.paintFocus(focusG, info.fill, focusSize);
+			PlafPaintUtils.paintFocus(focusG, info.fill, focusSize);
 			focusG.dispose();
 			paintBorder(g, info);
 		} else if(focus==PAINT_FOCUS_BOTH) {
 			paintBorder(g, info);
-			PaintUtils.paintFocus(g, info.fill, focusSize);
+			PlafPaintUtils.paintFocus(g, info.fill, focusSize);
 		} else {
 			paintBorder(g, info);
 		}
@@ -968,9 +1050,43 @@ public abstract class FilledButtonUI extends ButtonUI {
 
 	public void paintBackground(Graphics2D g,ButtonInfo info) {
 		if(info.button.isContentAreaFilled()) {
+			ButtonModel model = info.button.getModel();
+			Color flashColor = (Color)info.button.getClientProperty("flash");
+			if (flashColor != null) {
+				model.setSelected(true);
+				int count = ((Integer)info.button.getClientProperty("flash.count")).intValue();
+				if (count % 2 == 0)
+					info.button.setBackground(flashColor);
+				else info.button.setBackground(Color.white);
+				if (count == 0) {
+					info.button.putClientProperty("flash",null);
+					org.bjb.EffectsLocker.release();
+				}
+				else if (((Boolean)info.button.getClientProperty("flash.active"))) {
+					info.button.putClientProperty("flash.active", new Boolean(false));
+					count--;
+					info.button.putClientProperty("flash.count", new Integer(count));
+					final AbstractButton btn = info.button;
+					Timer nextFlash = new Timer(600,new ActionListener() {
+						public void actionPerformed(ActionEvent e) {
+							btn.putClientProperty("flash.active",new Boolean(true));
+							btn.repaint();
+						}
+					});	
+					nextFlash.setRepeats(false);
+					nextFlash.start();
+				}
+			}
+			else if (org.bjb.Preferences.isDefaultButtons() && ((javax.swing.JButton)info.button).isDefaultButton()) {
+				info.button.setBackground(org.bjb.BlackJackApp.teal);
+				model.setSelected(true);
+			}
+			else {
+				info.button.setBackground(Color.white);
+				model.setSelected(false);
+			}
 			g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-			Paint fillPaint = buttonFill.getFill(info.button, info.fillBounds);
+			Paint fillPaint = fill.getFill(info.button, info.fillBounds);
 			g.setPaint(fillPaint);
 			g.fill( info.fill );
 		}
@@ -978,7 +1094,7 @@ public abstract class FilledButtonUI extends ButtonUI {
 
 	public void paintBorder(Graphics2D g,ButtonInfo info) {
 		if(info.button.isBorderPainted()) {
-			Paint borderColor = buttonFill.getBorder(info.button, info.fillBounds);
+			Paint borderColor = fill.getBorder(info.button, info.fillBounds);
 			g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_NORMALIZE);
 			if(isBorderAntialiased()) {
 				g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -986,7 +1102,7 @@ public abstract class FilledButtonUI extends ButtonUI {
 				g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
 			}
 			g.setPaint(borderColor);
-			g.draw( info.edge );
+			g.draw( info.fill );
 		}
 	}
 
@@ -1002,9 +1118,9 @@ public abstract class FilledButtonUI extends ButtonUI {
 	protected void paintEffects(Graphics2D g,ButtonInfo info,boolean background) {
 		int ctr = 0;
 		while(ctr<info.effects.size()) {
-			UIEffect effect = (UIEffect)info.effects.get(ctr);
+			PaintUIEffect effect = info.effects.get(ctr);
 			effect.paint( (Graphics2D)g.create() );
-			if(effect.isActive()==false) {
+			if(effect.getState()==State.FINISHED) {
 				info.effects.remove(ctr);
 			} else {
 				ctr++;
@@ -1043,28 +1159,32 @@ public abstract class FilledButtonUI extends ButtonUI {
 		FontMetrics fm = info.button.getFontMetrics(info.button.getFont());
 		int mnemonicIndex = info.button.getDisplayedMnemonicIndex();
 		String text = info.button.getText();
-		int textShiftOffset = 0;
-
+//		int textShiftOffset = 0;
+		Color textColor = null;
+		if ((org.bjb.Preferences.isDefaultButtons() && ((javax.swing.JButton)info.button).isDefaultButton()) || !model.isEnabled() || (BlackJackApp.getGame().isGameOver() && !text.equals("Play"))) 
+			textColor = info.button.getBackground();
+		else textColor = BlackJackApp.teal;
 
 		g.setComposite(AlphaComposite.SrcOver);
 		/* Draw the Text */
-		if(model.isEnabled()) {
-			/*** paint the text normally */
-			g.setColor(info.button.getForeground());
-			BasicGraphicsUtils.drawStringUnderlineCharAt(g,text, mnemonicIndex,
-					info.textRect.x + textShiftOffset,
-					info.textRect.y + fm.getAscent() + textShiftOffset);
-		} else {
+//		if(model.isEnabled()) {
+//			/*** paint the text normally */
+//			g.setColor(info.button.getForeground());
+//			BasicGraphicsUtils.drawStringUnderlineCharAt(g,text, mnemonicIndex,
+//					info.textRect.x + textShiftOffset,
+//					info.textRect.y + fm.getAscent() + textShiftOffset);
+//		} else */ if (true) {
 			/*** paint the text disabled ***/
-			g.setColor(info.button.getBackground().brighter());
+			g.setColor(textColor.brighter());
 			BasicGraphicsUtils.drawStringUnderlineCharAt(g,text, mnemonicIndex,
 					info.textRect.x, info.textRect.y + fm.getAscent());
-			g.setColor(info.button.getBackground().darker());
+			g.setColor(textColor.darker());
 			BasicGraphicsUtils.drawStringUnderlineCharAt(g,text, mnemonicIndex,
 					info.textRect.x - 1, info.textRect.y + fm.getAscent() - 1);
-		}
+//		}
 	}
 
+	@Override
 	public void uninstallUI(JComponent c) {
 		AbstractButton button = (AbstractButton)c;
 
@@ -1082,388 +1202,6 @@ public abstract class FilledButtonUI extends ButtonUI {
 
 		super.uninstallUI(c);
 	}
-
-	/** This redefines the edge, fill, iconRect, and textRect fields
-	 * of this object.  Also once the fill is redefined, this should
-	 * call <code>updateFillBounds()</code>.
-	 */
-	protected void updateLayout(AbstractButton button,ButtonInfo info) {
-		
-		Shape shape = (Shape)button.getClientProperty(SHAPE);
-		int horizontalPosition = getHorizontalPosition(button);
-		int verticalPosition = getVerticalPosition(button);
-
-		int width = button.getWidth();
-		int height = button.getHeight();
-
-		String key = width+" "+height+" "+horizontalPosition+" "+verticalPosition;
-
-		button.putClientProperty("FilledButtonUI.validationKey", key);
-		
-		int dx = 0;
-		int dy = 0;
-
-
-		if(horizontalPosition==POS_RIGHT || horizontalPosition==POS_ONLY) {
-			width--;
-		}
-		if(verticalPosition==POS_BOTTOM || verticalPosition==POS_ONLY) {
-			height--;
-		}
-
-		if(getFocusPainting(button)==PAINT_FOCUS_OUTSIDE || 
-				getFocusPainting(button)==PAINT_FOCUS_BOTH) {
-			if(horizontalPosition==POS_LEFT || horizontalPosition==POS_ONLY) {
-				dx+=focusSize;
-				width-=focusSize;
-			}
-			if(horizontalPosition==POS_RIGHT || horizontalPosition==POS_ONLY) {
-				width-=focusSize;
-			}
-			if(verticalPosition==POS_TOP || verticalPosition==POS_ONLY) {
-				dy+=focusSize;
-				height-=focusSize;
-			}
-			if(verticalPosition==POS_BOTTOM || verticalPosition==POS_ONLY) {
-				height-=focusSize;
-			}
-		} else {
-			if(horizontalPosition==POS_RIGHT || horizontalPosition==POS_ONLY) {
-				width--;
-			}
-			if(verticalPosition==POS_BOTTOM || verticalPosition==POS_ONLY) {
-				height--;
-			}
-
-			if((verticalPosition==POS_BOTTOM || verticalPosition==POS_ONLY) &&
-					buttonFill.getShadowHighlight(button)!=null) {
-				height--;
-			}
-		}
-		
-
-		FontMetrics fm = button.getFontMetrics(button.getFont());
-
-		info.viewRect.x = info.viewRect.y = info.textRect.x = info.textRect.y = info.textRect.width = info.textRect.height = 0;
-		info.iconRect.x = info.iconRect.y = info.iconRect.width = info.iconRect.height = 0;
-		info.viewRect.width = Short.MAX_VALUE;
-		info.viewRect.height = Short.MAX_VALUE;
-
-		SwingUtilities.layoutCompoundLabel(fm, 
-				button.getText(), 
-				button.getIcon(), 
-				button.getVerticalAlignment(), 
-				button.getHorizontalAlignment(), 
-				button.getVerticalTextPosition(), 
-				button.getHorizontalTextPosition(), 
-				info.viewRect, 
-				info.iconRect, 
-				info.textRect,
-				button.getIconTextGap());
-
-		Insets textInsets = getTextPadding();
-		Insets iconInsets = getIconPadding();
-
-		Rectangle tempTextRect = new Rectangle(info.textRect);
-		Rectangle tempIconRect = new Rectangle(info.iconRect);
-		if(info.textRect.width>0) {
-			tempTextRect.y -= textInsets.top;
-			tempTextRect.x -= textInsets.left;
-			tempTextRect.width += textInsets.left+textInsets.right;
-			tempTextRect.height += textInsets.top+textInsets.bottom;
-		}
-		if(info.iconRect.width>0) {
-			tempIconRect.y -= iconInsets.top;
-			tempIconRect.x -= iconInsets.left;
-			tempIconRect.width += iconInsets.left+iconInsets.right;
-			tempIconRect.height += iconInsets.top+iconInsets.bottom;
-		}
-
-		Rectangle sum = getSum(new Rectangle[] { tempIconRect, tempTextRect});
-
-		Insets padding = getContentInsets(button);
-
-		float centerX = ((float)(button.getWidth()-padding.left-padding.right))/2f;
-		float centerY = ((float)(button.getHeight()-padding.top-padding.bottom))/2f;
-
-		float shiftX = centerX-((float)sum.width)/2f-sum.x+padding.left;
-		float shiftY = centerY-((float)sum.height)/2f-sum.y+padding.top;
-		
-		//define the actual fill and border of the shape:
-		//always fill the entire width/height we are allowed
-		//(knowing that the width/height fields here are already
-		//reduced to compensate for focus rings).
-		//The size of this button is the responsibility of the
-		//LayoutManager, and the preferred size is calculated
-		//in getPreferredSize().  Here we just work with what
-		//we're given.
-		if(shape!=null) {
-			Rectangle2D originalBounds = new Rectangle2D.Float();
-			ShapeBounds.getBounds(shape,originalBounds);
-			Rectangle2D newBounds = new Rectangle2D.Float(dx,dy,width,height);
-			AffineTransform transform = TransformUtils.createAffineTransform(originalBounds,newBounds);
-			info.fill.reset();
-			info.edge.reset();
-			info.fill.append(shape, true);
-			info.edge.append(shape, true);
-			info.fill.closePath();
-			info.edge.closePath();
-			info.fill.transform(transform);
-			info.edge.transform(transform);
-		} else {
-			int minR = Math.min(height/2, width/2);
-	
-			int topRightRadius = Math.min(maxTopRightRadius,minR);
-			int topLeftRadius = Math.min(maxTopLeftRadius,minR);
-			int bottomRightRadius = Math.min(maxBottomRightRadius,minR);
-			int bottomLeftRadius = Math.min(maxBottomLeftRadius,minR);
-	
-			float k = .22385763f*2;
-	
-			//define the shapes:
-	
-			GeneralPath fill = info.fill;
-			GeneralPath edge = info.edge;
-	
-			fill.reset();
-			edge.reset();
-	
-			//this is based on a 4x4 grid enumerating all the possible combinations:
-			if(verticalPosition==POS_TOP && horizontalPosition==POS_LEFT) {
-				edge.moveTo(width, 0);
-				if(topLeftRadius==0) {
-					edge.lineTo(0, 0);
-				} else {
-					edge.lineTo(topLeftRadius, 0);
-					edge.curveTo(topLeftRadius-topLeftRadius*k, 0, 
-							0, topLeftRadius-topLeftRadius*k, 
-							0, topLeftRadius);
-				}
-				edge.lineTo(0, height);
-				fill.append(edge, false);
-				fill.lineTo(width, height);
-				fill.lineTo(width,0);
-			} else if( (verticalPosition==POS_TOP && horizontalPosition==POS_MIDDLE) ||
-					(verticalPosition==POS_MIDDLE && horizontalPosition==POS_LEFT) ||
-					(verticalPosition==POS_MIDDLE && horizontalPosition==POS_MIDDLE)) {
-				edge.moveTo(width, 0);
-				edge.lineTo(0, 0);
-				edge.lineTo(0, height);
-				fill.append(edge, false);
-				fill.lineTo(width, height);
-				fill.lineTo(width,0);
-			} else if(verticalPosition==POS_TOP && horizontalPosition==POS_RIGHT) {
-				edge.moveTo(width, height);
-				if(topRightRadius==0) {
-					edge.lineTo(width,0);
-				} else {
-					edge.lineTo(width, topRightRadius);
-					edge.curveTo(width, topRightRadius-topRightRadius*k, 
-							width-topRightRadius+topRightRadius*k, 0, 
-							width-topRightRadius, 0);
-				}
-				edge.lineTo(0, 0);
-				edge.lineTo(0, height);
-				fill.append(edge, false);
-				fill.lineTo(width, height);
-			} else if(verticalPosition==POS_TOP && horizontalPosition==POS_ONLY) {
-				edge.moveTo(width, height);
-				if(topRightRadius==0) {
-					edge.lineTo(width, 0);
-				} else {
-					edge.lineTo(width, topRightRadius);
-					edge.curveTo(width, topRightRadius-topRightRadius*k, 
-							width-topRightRadius+topRightRadius*k, 0, 
-							width-topRightRadius, 0);
-				}
-				if(topLeftRadius==0) {
-					edge.lineTo(0, 0);
-				} else {
-					edge.lineTo(topLeftRadius, 0);
-					edge.curveTo(topLeftRadius-topLeftRadius*k, 0, 
-							0, topLeftRadius-topLeftRadius*k, 
-							0, topLeftRadius);
-				}
-				edge.lineTo(0, height);
-				fill.append(edge, false);
-				fill.lineTo(width, height);
-	
-				bottomRightRadius = 0;
-				bottomLeftRadius = 0;
-			} else if(verticalPosition==POS_MIDDLE) {
-				edge.moveTo(width,height);
-				edge.lineTo(width, 0);
-				edge.lineTo(0, 0);
-				edge.lineTo(0, height);
-				fill.append(edge, false);
-				fill.lineTo(width, height);
-			} else if(verticalPosition==POS_BOTTOM && horizontalPosition==POS_LEFT) {
-				edge.moveTo(width, 0);
-				edge.lineTo(0, 0);
-				if(bottomLeftRadius==0) {
-					edge.lineTo(0,height);
-				} else {
-					edge.lineTo(0, height-bottomLeftRadius);
-					edge.curveTo(0, height-bottomLeftRadius+bottomLeftRadius*k,
-							bottomLeftRadius-bottomLeftRadius*k, height,
-							bottomLeftRadius, height);
-				}
-				edge.lineTo(width, height);
-				fill.append(edge, false);
-				fill.lineTo(width, 0);
-			} else if(horizontalPosition==POS_MIDDLE) {
-				edge.moveTo(width, 0);
-				edge.lineTo(0, 0);
-				edge.lineTo(0, height);
-				edge.lineTo(width, height);
-				fill.append(edge, false);
-				fill.lineTo(width, 0);
-			} else if(horizontalPosition==POS_RIGHT && verticalPosition==POS_BOTTOM) {
-				edge.moveTo(width, 0);
-				edge.lineTo(0, 0);
-				edge.lineTo(0, height);
-				if(bottomRightRadius==0) {
-					edge.lineTo(width, height);
-				} else {
-					edge.lineTo(width-bottomRightRadius, height);
-					edge.curveTo(width-bottomRightRadius+bottomRightRadius*k, height, 
-							width, height-bottomRightRadius+bottomRightRadius*k, 
-							width, height-bottomRightRadius);
-				}
-				edge.lineTo(width, 0);
-				fill.append(edge, false);
-				edge.closePath();
-			} else if(horizontalPosition==POS_ONLY && verticalPosition==POS_BOTTOM) {
-				edge.moveTo(width, 0);
-				edge.lineTo(0, 0);
-				if(bottomLeftRadius==0) {
-					edge.lineTo(0, height);
-				} else {
-					edge.lineTo(0, height-bottomLeftRadius);
-					edge.curveTo(0, height-bottomLeftRadius+bottomLeftRadius*k,
-							bottomLeftRadius-bottomLeftRadius*k, height,
-							bottomLeftRadius, height);
-				}
-				if(bottomRightRadius==0) {
-					edge.lineTo(width, height);
-				} else {
-					edge.lineTo(width-bottomRightRadius, height);
-					edge.curveTo(width-bottomRightRadius+bottomRightRadius*k, height, 
-							width, height-bottomRightRadius+bottomRightRadius*k, 
-							width, height-bottomRightRadius);
-				}
-				edge.lineTo(width, 0);
-				fill.append(edge, false);
-				edge.closePath();
-			} else if(horizontalPosition==POS_LEFT && verticalPosition==POS_ONLY) {
-				edge.moveTo(width, 0);
-				if(topLeftRadius==0) {
-					edge.lineTo(0, 0);
-				} else {
-					edge.lineTo(topLeftRadius, 0);
-					edge.curveTo(topLeftRadius-topLeftRadius*k, 0,
-							0, topLeftRadius-topLeftRadius*k,
-							0, topLeftRadius);
-				}
-				if(bottomLeftRadius==0) {
-					edge.lineTo(0, height);
-				} else {
-					edge.lineTo(0, height-bottomLeftRadius);
-					edge.curveTo(0, height-bottomLeftRadius+bottomLeftRadius*k,
-							bottomLeftRadius-bottomLeftRadius*k, height,
-							bottomLeftRadius, height);
-				}
-				edge.lineTo(width, height);
-				fill.append(edge, false);
-				fill.lineTo(width, 0);
-			} else if(verticalPosition==POS_ONLY && horizontalPosition==POS_RIGHT) {
-				edge.moveTo(0,0);
-				edge.lineTo(0, height);
-				if(bottomRightRadius==0) {
-					edge.lineTo(width, height);
-				} else {
-					edge.lineTo(width-bottomRightRadius, height);
-					edge.curveTo(width-bottomRightRadius+bottomRightRadius*k, height,
-							width, height-bottomRightRadius+bottomRightRadius*k,
-							width, height-bottomRightRadius );
-				}
-				if(topRightRadius==0) {
-					edge.lineTo(width, 0);
-				} else {
-					edge.lineTo(width, topRightRadius);
-					edge.curveTo(width,topRightRadius-topRightRadius*k,
-							width-topRightRadius+topRightRadius*k, 0,
-							width-topRightRadius, 0);
-				}
-				edge.lineTo(0, 0);
-				fill.append(edge, false);
-				edge.closePath();
-			} else { //if(horiziontalPosition==ONLY && verticalPosition==ONLY)
-				if(topLeftRadius==0) {
-					edge.moveTo(0, 0);
-				} else {
-					edge.moveTo(topLeftRadius, 0);
-					edge.curveTo(topLeftRadius-topLeftRadius*k, 0,
-							0, topLeftRadius-topLeftRadius*k,
-							0, topLeftRadius);
-				}
-				if(bottomLeftRadius==0) {
-					edge.lineTo(0, height);
-				} else {
-					edge.lineTo(0, height-bottomLeftRadius);
-					edge.curveTo( 0, height-bottomLeftRadius+bottomLeftRadius*k,
-							bottomLeftRadius-bottomLeftRadius*k, height,
-							bottomLeftRadius, height );
-				}
-				if(bottomRightRadius==0) {
-					edge.lineTo(width, height);
-				} else {
-					edge.lineTo( width-bottomRightRadius, height);
-					edge.curveTo(width-bottomRightRadius+bottomRightRadius*k, height,
-							width, height-bottomRightRadius+bottomRightRadius*k,
-							width, height-bottomRightRadius );
-				}
-				if(topRightRadius==0) {
-					edge.lineTo(width, 0);
-				} else {
-					edge.lineTo(width, topRightRadius);
-					edge.curveTo(width,topRightRadius-topRightRadius*k,
-							width-topRightRadius+topRightRadius*k, 0,
-							width-topRightRadius, 0);
-				}
-				edge.lineTo(topLeftRadius, 0);
-				fill.append(edge, false);
-				edge.closePath();
-			}
-			fill.closePath();
-	
-			AffineTransform transform = AffineTransform.getTranslateInstance(dx, dy);
-	
-			fill.transform(transform);
-			edge.transform(transform);
-	
-			if(button.getVerticalAlignment()==SwingConstants.CENTER &&
-					button.getVerticalTextPosition()==SwingConstants.CENTER &&
-					info.textRect.width>0) {
-				Font font = button.getFont();
-				int unusedAscent = getUnusedAscent(fm,font);
-				int ascent = fm.getAscent()-unusedAscent;
-	
-				shiftY = (int)(-sum.y+centerY-ascent/2-unusedAscent+padding.top-textInsets.top);
-			}
-		}
-		
-		info.iconRect.setFrame( info.iconRect.x + shiftX, 
-				info.iconRect.y + shiftY, 
-				info.iconRect.width, 
-				info.iconRect.height );
-		info.textRect.setRect( (int)(info.textRect.x + shiftX+.5f), 
-				(int)(info.textRect.y + shiftY+.5f), 
-				info.textRect.width, 
-				info.textRect.height);
-		
-		info.updateFillBounds();
-	}
 	
 	/** This may be used to take some shortcuts in rendering the button if
 	 * it is assumed that -- when enabled and isContentArea is true --
@@ -1471,6 +1209,7 @@ public abstract class FilledButtonUI extends ButtonUI {
 	 */
 	public abstract boolean isFillOpaque();
 	
+	@Override
 	public boolean contains(JComponent c, int x, int y) {
 		AbstractButton button = (AbstractButton)c;
 		ButtonInfo info = getButtonInfo(button);

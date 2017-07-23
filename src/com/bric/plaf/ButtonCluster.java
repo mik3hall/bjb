@@ -1,3 +1,22 @@
+/*
+ * @(#)ButtonCluster.java
+ *
+ * $Date: 2012-07-03 01:10:05 -0500 (Tue, 03 Jul 2012) $
+ *
+ * Copyright (c) 2011 by Jeremy Wood.
+ * All rights reserved.
+ *
+ * The copyright of this software is owned by Jeremy Wood. 
+ * You may not use, copy or modify this software, except in  
+ * accordance with the license agreement you entered into with  
+ * Jeremy Wood. For details see accompanying license terms.
+ * 
+ * This software is probably, but not necessarily, discussed here:
+ * http://javagraphics.java.net/
+ * 
+ * That site should also contain the most recent official version
+ * of this software.  (See the SVN repository for more details.)
+ */
 package com.bric.plaf;
 
 import java.awt.Component;
@@ -8,7 +27,6 @@ import java.util.Vector;
 
 import javax.swing.AbstractButton;
 import javax.swing.JComponent;
-import javax.swing.JToolBar;
 import javax.swing.SwingConstants;
 
 /** This is a list of buttons that are physically clustered
@@ -36,12 +54,14 @@ public class ButtonCluster {
 	
 	private static final ComponentListener componentListener = new ComponentAdapter() {
 
+		@Override
 		public void componentHidden(ComponentEvent e) {
 			AbstractButton button = (AbstractButton)e.getSource();
 			ButtonCluster cluster = ButtonCluster.getCluster(button);
 			cluster.updateSegmentPositions();
 		}
 
+		@Override
 		public void componentShown(ComponentEvent e) {
 			AbstractButton button = (AbstractButton)e.getSource();
 			ButtonCluster cluster = ButtonCluster.getCluster(button);
@@ -87,20 +107,20 @@ public class ButtonCluster {
 	 * clusters should be made the same approximate size.
 	 */
 	public static void install(JComponent parent,int orientation,FilledButtonUI ui,boolean standardize) {
-		Vector buttons = new Vector();
+		Vector<AbstractButton> buttons = new Vector<AbstractButton>();
 		for(int a = 0; a<parent.getComponentCount(); a++) {
 			if(parent.getComponent(a) instanceof AbstractButton) {
-				buttons.add(parent.getComponent(a));
+				buttons.add( (AbstractButton)parent.getComponent(a));
 			} else {
 				//hit something else... maybe a separator?  let's make
 				//everything we found thus far a cluster, and clear the buffer.
-				AbstractButton[] array = (AbstractButton[])buttons.toArray(new AbstractButton[buttons.size()]);
+				AbstractButton[] array = buttons.toArray(new AbstractButton[buttons.size()]);
 				install(array,orientation,ui,standardize);
 				buttons.removeAllElements();
 			}
 		}
 		//clear the buffer, make what's left a cluster.
-		AbstractButton[] array = (AbstractButton[])buttons.toArray(new AbstractButton[buttons.size()]);
+		AbstractButton[] array = buttons.toArray(new AbstractButton[buttons.size()]);
 		install(array,orientation,ui,standardize);
 	}
 	
@@ -137,6 +157,7 @@ public class ButtonCluster {
 		for(int a = 0; a<buttons.length; a++) {
 			buttons[a].setUI(ui);
 		}
+		@SuppressWarnings("unused")
 		ButtonCluster cluster = new ButtonCluster(buttons,orientation,standardize);
 	}
 
@@ -189,7 +210,7 @@ public class ButtonCluster {
 		String MID = FilledButtonUI.MIDDLE;
 		String ONLY = FilledButtonUI.ONLY;
 		String FIRST, LAST;
-		if(orientation==JToolBar.VERTICAL) {
+		if(orientation==SwingConstants.VERTICAL) {
 			FIRST = FilledButtonUI.TOP;
 			LAST = FilledButtonUI.BOTTOM;
 		} else {
@@ -236,7 +257,7 @@ public class ButtonCluster {
 					}
 				}
 				
-				if(orientation==JToolBar.HORIZONTAL) {
+				if(orientation==SwingConstants.HORIZONTAL) {
 					button.putClientProperty(FilledButtonUI.HORIZONTAL_POSITION, position);
 					button.putClientProperty(FilledButtonUI.VERTICAL_POSITION, ONLY);
 				} else {

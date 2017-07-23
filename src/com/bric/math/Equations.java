@@ -1,9 +1,9 @@
 /*
  * @(#)Equations.java
  *
- * $Date: 2009-02-19 23:34:41 -0800 (Thu, 19 Feb 2009) $
+ * $Date: 2012-07-03 01:10:05 -0500 (Tue, 03 Jul 2012) $
  *
- * Copyright (c) 2009 by Jeremy Wood.
+ * Copyright (c) 2011 by Jeremy Wood.
  * All rights reserved.
  *
  * The copyright of this software is owned by Jeremy Wood. 
@@ -12,10 +12,10 @@
  * Jeremy Wood. For details see accompanying license terms.
  * 
  * This software is probably, but not necessarily, discussed here:
- * http://javagraphics.blogspot.com/
+ * http://javagraphics.java.net/
  * 
- * And the latest version should be available here:
- * https://javagraphics.dev.java.net/
+ * That site should also contain the most recent official version
+ * of this software.  (See the SVN repository for more details.)
  */
 package com.bric.math;
 
@@ -32,12 +32,10 @@ public class Equations {
 	 */
 	public static boolean VERBOSE_EXCEPTIONS = true;
 	
-	private static Comparator coefficientComparator = new Comparator() {
-		public int compare(Object obj1, Object obj2) {
+	private static Comparator<double[]> coefficientComparator = new Comparator<double[]>() {
+		public int compare(double[] d1, double[] d2) {
 			int v1 = 0;
 			int v2 = 0;
-			double[] d1 = (double[])obj1;
-			double[] d2 = (double[])obj2;
 			int a;
 			for( a = 0; a<d1.length; a++) {
 				if(d1[a]==1) {
@@ -168,7 +166,7 @@ public class Equations {
 		while(ctr<b.length) {
 			if(coefficients[row].length!=size+1) 
 				throw new IllegalArgumentException("The matrix must be N x (N+1) units long.  The matrix provided is "+size+" x "+coefficients[row].length+" units.");
-			if(b[row]==false && Math.abs(coefficients[row][ctr])>.00000001) {
+			if(b[row]==false && Math.abs(coefficients[row][ctr])>.0000000001) {
 				
 				errorCounter = 0;
 				//we haven't considered this row yet

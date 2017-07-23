@@ -1,3 +1,22 @@
+/*
+ * @(#)FocusArrowListener.java
+ *
+ * $Date: 2012-07-03 01:10:05 -0500 (Tue, 03 Jul 2012) $
+ *
+ * Copyright (c) 2011 by Jeremy Wood.
+ * All rights reserved.
+ *
+ * The copyright of this software is owned by Jeremy Wood. 
+ * You may not use, copy or modify this software, except in  
+ * accordance with the license agreement you entered into with  
+ * Jeremy Wood. For details see accompanying license terms.
+ * 
+ * This software is probably, but not necessarily, discussed here:
+ * http://javagraphics.java.net/
+ * 
+ * That site should also contain the most recent official version
+ * of this software.  (See the SVN repository for more details.)
+ */
 package com.bric.plaf;
 
 import java.awt.Component;
@@ -23,6 +42,7 @@ import javax.swing.SwingUtilities;
  */
 public class FocusArrowListener extends KeyAdapter {
 
+	@Override
 	public void keyPressed(KeyEvent e) {
 		int code = e.getKeyCode();
 		int dx = 0;
@@ -56,7 +76,7 @@ public class FocusArrowListener extends KeyAdapter {
 		if(dx==0 && dy==0) //this would result in an infinite loop
 			throw new IllegalArgumentException("dx ("+dx+") and ("+dy+") cannot both be zero");
 		
-		Set focusableComponents = getFocusableComponents(src);
+		Set<Component> focusableComponents = getFocusableComponents(src);
 		
 		int x = src.getWidth()/2;
 		int y = src.getHeight()/2;
@@ -76,6 +96,11 @@ public class FocusArrowListener extends KeyAdapter {
 			if(comp!=null && canAcceptFocus==false)
 				comp = null;
 		}
+		
+		//TODO: implement a more robust searching mechanism instead of the above
+		//If a component is below the src, but to the left or right of the center:
+		//it should still be detected when you press the down arrow key.
+
 		if(comp!=null && comp!=src && comp!=window && (!(comp instanceof JPanel))) {
 			comp.requestFocus();
 			return true;
@@ -100,8 +125,8 @@ public class FocusArrowListener extends KeyAdapter {
 	 * @param currentFocusOwner the current focus owner.
 	 * @return all the JComponents that can receive the focus.
 	 */
-	public static Set getFocusableComponents(Component currentFocusOwner) {
-		HashSet set = new HashSet();
+	public static Set<Component> getFocusableComponents(Component currentFocusOwner) {
+		HashSet<Component> set = new HashSet<Component>();
 		set.add(currentFocusOwner);
 
         Container rootAncestor = currentFocusOwner.getFocusCycleRootAncestor();
@@ -118,16 +143,15 @@ public class FocusArrowListener extends KeyAdapter {
             FocusTraversalPolicy policy =
                 rootAncestor.getFocusTraversalPolicy();
             Component toFocus = policy.getComponentAfter(rootAncestor, comp);
-            final Component startingPoint = currentFocusOwner;
             
-            while(toFocus!=null && toFocus!=startingPoint) {
+            while(toFocus!=null && set.contains(toFocus)==false) {
             	set.add(toFocus);
                 toFocus = policy.getComponentAfter(rootAncestor, toFocus);
             }
             
             toFocus = policy.getComponentBefore(rootAncestor, comp);
             
-            while(toFocus!=null && toFocus!=startingPoint) {
+            while(toFocus!=null && set.contains(toFocus)==false) {
             	set.add(toFocus);
                 toFocus = policy.getComponentBefore(rootAncestor, toFocus);
             }

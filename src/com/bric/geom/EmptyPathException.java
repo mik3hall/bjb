@@ -1,9 +1,9 @@
 /*
  * @(#)EmptyPathException.java
  *
- * $Date: 2009-02-20 01:34:41 -0600 (Fri, 20 Feb 2009) $
+ * $Date: 2011-05-02 16:01:45 -0500 (Mon, 02 May 2011) $
  *
- * Copyright (c) 2009 by Jeremy Wood.
+ * Copyright (c) 2011 by Jeremy Wood.
  * All rights reserved.
  *
  * The copyright of this software is owned by Jeremy Wood. 
@@ -12,10 +12,10 @@
  * Jeremy Wood. For details see accompanying license terms.
  * 
  * This software is probably, but not necessarily, discussed here:
- * http://javagraphics.blogspot.com/
+ * http://javagraphics.java.net/
  * 
- * And the latest version should be available here:
- * https://javagraphics.dev.java.net/
+ * That site should also contain the most recent official version
+ * of this software.  (See the SVN repository for more details.)
  */
 package com.bric.geom;
 

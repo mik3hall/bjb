@@ -1,9 +1,9 @@
 /*
  * @(#)Clipper.java
  *
- * $Date: 2009-02-23 14:39:51 -0600 (Mon, 23 Feb 2009) $
+ * $Date: 2012-07-03 01:10:05 -0500 (Tue, 03 Jul 2012) $
  *
- * Copyright (c) 2009 by Jeremy Wood.
+ * Copyright (c) 2011 by Jeremy Wood.
  * All rights reserved.
  *
  * The copyright of this software is owned by Jeremy Wood. 
@@ -12,10 +12,10 @@
  * Jeremy Wood. For details see accompanying license terms.
  * 
  * This software is probably, but not necessarily, discussed here:
- * http://javagraphics.blogspot.com/
+ * http://javagraphics.java.net/
  * 
- * And the latest version should be available here:
- * https://javagraphics.dev.java.net/
+ * That site should also contain the most recent official version
+ * of this software.  (See the SVN repository for more details.)
  */
 package com.bric.geom;
 
@@ -25,6 +25,7 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.CubicCurve2D;
 import java.awt.geom.GeneralPath;
 import java.awt.geom.PathIterator;
+import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.util.Arrays;
 import java.util.Stack;
@@ -33,9 +34,8 @@ import com.bric.util.FloatArrayFactory;
 
 /** This class lets you clip/intersect an arbitrary shape to a Rectangle2D.
  *
- * @version 2.0
  */
-public class Clipper {
+public abstract class Clipper {
 	
 	private static final FloatArrayFactory floatFactory = new FloatArrayFactory();
 	
@@ -54,14 +54,14 @@ public class Clipper {
 	 * your shape (lots of redundant lineTo's will be called), but if a shape
 	 * is properly collapsed it has a much better chance of return a truly
 	 * accurate result when you call getBounds() on it.
-	 * <P>Note that there are still some far fetch examples (involving discontinous
+	 * <P>Note that there are still some far fetched examples (involving discontinous
 	 * shapes) where getBounds() may be inaccurate, though.
 	 * 2.  This can take a Function (either quadratic or cubic) and split it over
-	 * a smaller interval from an arbitary [t0,t1].
+	 * a smaller interval from an arbitrary [t0,t1].
 	 */
 	static class ClippedPath {
 		public final GeneralPath g;
-		private Stack uncommittedPoints = new Stack();
+		private Stack<float[]> uncommittedPoints = new Stack<float[]>();
 		private float initialX, initialY;
 		
 		public ClippedPath(int windingRule) {
@@ -117,7 +117,7 @@ public class Clipper {
 		public void lineTo(float x,float y) {
 			
 			if(uncommittedPoints.size()>0) {
-				float[] last = (float[])uncommittedPoints.peek();
+				float[] last = uncommittedPoints.peek();
 				//are we adding the same point?
 				if(Math.abs(last[0]-x)<TOLERANCE && Math.abs(last[1]-y)<TOLERANCE)
 					return;
@@ -140,24 +140,24 @@ public class Clipper {
 		public void flush() {
 			while(uncommittedPoints.size()>0) {
 				identifyLines : while(uncommittedPoints.size()>=3) {
-					float[] first = (float[])uncommittedPoints.get(0);
-					float[] middle = (float[])uncommittedPoints.get(1);
-					float[] last = (float[])uncommittedPoints.get(2);
+					float[] first = uncommittedPoints.get(0);
+					float[] middle = uncommittedPoints.get(1);
+					float[] last = uncommittedPoints.get(2);
 					
 					if(Math.abs(first[0]-middle[0])<TOLERANCE && Math.abs(first[0]-last[0])<TOLERANCE) {
 						//everything has the same x, so we have a vertical line
-						float[] array = (float[])uncommittedPoints.remove(1);
+						float[] array = uncommittedPoints.remove(1);
 						floatFactory.putArray(array);
 					} else if(Math.abs(first[1]-middle[1])<TOLERANCE && Math.abs(first[1]-last[1])<TOLERANCE) {
 						//everything has the same y, so we have a horizontal line
-						float[] array = (float[])uncommittedPoints.remove(1);
+						float[] array = uncommittedPoints.remove(1);
 						floatFactory.putArray(array);
 					} else {
 						break identifyLines;
 					}
 				}
 			
-				float[] point = (float[])uncommittedPoints.remove(0);
+				float[] point = uncommittedPoints.remove(0);
 				g.lineTo( point[0], point[1]);
 				floatFactory.putArray(point);
 			}
@@ -165,24 +165,24 @@ public class Clipper {
 	}
 	
 	/** A function used to describe one of the 2 parametric equations
-	 * for a segment of a path.  This can be thought of is x(t).
+	 * for a segment of a path.  This can be thought of is f(t).
 	 */
 	static interface Function {
 		/** evaluates this function at a given value */
 		public double evaluate(double t);
 		
-		/** Calculates all the t-values which will yield the result "x"
+		/** Calculates all the t-values which will yield the result "f"
 		 * in this function.
 		 * 
-		 * @param x the function result you're searching for
+		 * @param f the function result you're searching for
 		 * @param dest the array the results will be stored in
 		 * @param destOffset the offset at which data will be added to
 		 * the array
 		 * @return the number of solutions found.
 		 */
-		public int evaluateInverse(double x,double[] dest,int destOffset);
+		public int evaluateInverse(double f,double[] dest,int destOffset);
 		  
-		/** Return the derivate (dx/dt) for a given value of t */
+		/** Return the derivative (df/dt) for a given value of t */
 		public double getDerivative(double t);
 	}
 	
@@ -201,6 +201,7 @@ public class Clipper {
 			intercept = x1;
 		}
 		
+		@Override
 		public String toString() {
 			return slope+"*t+"+intercept;
 		}
@@ -225,6 +226,7 @@ public class Clipper {
 		
 		public QFunction() {}
 		
+		@Override
 		public String toString() {
 			return a+"*t*t+"+b+"*t+"+c;
 		}
@@ -267,6 +269,7 @@ public class Clipper {
 		
 		public CFunction() {}
 		
+		@Override
 		public String toString() {
 			return a+"*t*t*t+"+b+"*t*t+"+c+"*t+"+d;
 		}
@@ -322,7 +325,7 @@ public class Clipper {
 	/** This creates a <code>GeneralPath</code> representing <code>s</code> when
 	 * clipped to <code>r</code>
 	 * @param s a shape that you want clipped
-	 * @param r the rectangle to clip it to
+	 * @param r the rectangle to clip to
 	 * @return a <code>GeneralPath</code> enclosing the new shape.
 	 */
 	public static GeneralPath clipToRect(Shape s,Rectangle2D r) {
@@ -339,25 +342,79 @@ public class Clipper {
 	 * @return a <code>GeneralPath</code> enclosing the new shape.
 	 */
 	public static GeneralPath clipToRect(Shape s,AffineTransform t,Rectangle2D r) {
-		PathIterator i = s.getPathIterator(t);
+		Clipper clipper = new RectangleClipper(r);
+		return clipper.clip(s, t);
+	}
+	
+	private static class RectangleClipper extends Clipper {
+		final float rTop;
+		final float rLeft;
+		final float rRight;
+		final float rBottom;
+		
+		private RectangleClipper(Rectangle2D rect) {
+			rTop = (float)rect.getY();
+			rLeft = (float)rect.getX();
+			rRight = (float)(rect.getX()+rect.getWidth());
+			rBottom = (float)(rect.getY()+rect.getHeight());
+		}
+		
+		@Override
+		boolean contains(float x,float y) {
+			return (x>=rLeft && x<=rRight && y>=rTop && y<=rBottom);
+		}
+		
+		@Override
+		void cap(Point2D.Float p) {
+			if(p.x<rLeft)
+				p.x = rLeft;
+			if(p.x>rRight)
+				p.x = rRight;
+			if(p.y<rTop)
+				p.y = rTop;
+			if(p.y>rBottom)
+				p.y = rBottom;
+		}
+
+		@Override
+		int collectIntersectionTimes(Function xf, Function yf,
+				double[] intersectionTimes) {
+			int sum = 0;
+			sum += xf.evaluateInverse(rLeft,intersectionTimes,sum);
+			sum += xf.evaluateInverse(rRight,intersectionTimes,sum);
+			sum += yf.evaluateInverse(rTop,intersectionTimes,sum);
+			sum += yf.evaluateInverse(rBottom,intersectionTimes,sum);
+			return sum;
+		}
+	}
+	
+	abstract void cap(Point2D.Float p);
+	abstract boolean contains(float x,float y);
+	/** Calculates the t-values for which this shape intersects the parametric function
+	 * provided.  The values in the array are not expected to be sorted.
+	 * 
+	 * @param xf the x parametric curve
+	 * @param yf the y parametric curve
+	 * @param intersectionTimes the array to store the data in.
+	 * @return the number of values provided.
+	 */
+	abstract int collectIntersectionTimes(Function xf,Function yf,double[] intersectionTimes);
+
+	GeneralPath clip(Shape incomingShape,AffineTransform transform) {
+		PathIterator i = incomingShape.getPathIterator(transform);
 		ClippedPath p = new ClippedPath(i.getWindingRule());
 		float initialX = 0;
 		float initialY = 0;
 		int k;
 		float[] f = floatFactory.getArray(6);
-		float rTop = (float)r.getY();
-		float rLeft = (float)r.getX();
-		float rRight = (float)(r.getX()+r.getWidth());
-		float rBottom = (float)(r.getY()+r.getHeight());
 		boolean shouldClose = false;
 		float lastX = 0;
 		float lastY = 0;
 		boolean lastValueWasCapped, thisValueIsCapped, midValueInvalid;
-		float cappedX, cappedY, x, y, x2, y2;
+		float x, y, x2, y2;
 		
-		//create 1 copy of all our possible functions,
-		//and recycle these objects constantly
-		//this way we avoid memory allocation:
+		//create 1 copy of objects and recycle them
+		//to reduce memory allocation:
 		LFunction lxf = new LFunction();
 		LFunction lyf = new LFunction();
 		QFunction qxf = new QFunction();
@@ -366,7 +423,8 @@ public class Clipper {
 		CFunction cyf = new CFunction();
 		Function xf = null;
 		Function yf = null;
-		double[] interestingTimes = new double[16];
+		Point2D.Float point = new Point2D.Float();
+		double[] intersectionTimes = new double[16];
 		int tCtr;
 		
 		while(i.isDone()==false) {
@@ -374,17 +432,11 @@ public class Clipper {
 			if(k==PathIterator.SEG_MOVETO) {
 				initialX = f[0];
 				initialY = f[1];
-				cappedX = f[0];
-				cappedY = f[1];
-				if(cappedX<rLeft)
-					cappedX = rLeft;
-				if(cappedX>rRight)
-					cappedX = rRight;
-				if(cappedY<rTop)
-					cappedY = rTop;
-				if(cappedY>rBottom)
-					cappedY = rBottom;
-				p.moveTo(cappedX,cappedY);
+				point.setLocation(f[0], f[1]);
+				cap(point);
+				
+				p.moveTo(point.x, point.y);
+
 				lastX = f[0];
 				lastY = f[1];
 			} else if(k==PathIterator.SEG_CLOSE) {
@@ -417,56 +469,40 @@ public class Clipper {
 				//gather all the t values at which we might be
 				//crossing the bounds of our rectangle:
 				
-				tCtr = 0;
-				
-				tCtr += xf.evaluateInverse(rLeft,interestingTimes,tCtr);
-				tCtr += xf.evaluateInverse(rRight,interestingTimes,tCtr);
-				tCtr += yf.evaluateInverse(rTop,interestingTimes,tCtr);
-				tCtr += yf.evaluateInverse(rBottom,interestingTimes,tCtr);
-				interestingTimes[tCtr++] = 1;
+				tCtr = collectIntersectionTimes(xf, yf, intersectionTimes);
+				intersectionTimes[tCtr++] = 1;
 				 //we never actually calculate with 0, but we need to know it's in the list
-				interestingTimes[tCtr++] = 0;
+				intersectionTimes[tCtr++] = 0;
 				
 				//put them in ascending order:
-				Arrays.sort(interestingTimes,0,tCtr);
+				Arrays.sort(intersectionTimes,0,tCtr);
 				
-				lastValueWasCapped = !(lastX>=rLeft && lastX<=rRight && lastY>=rTop && lastY<=rBottom);
+				lastValueWasCapped = !contains(lastX, lastY);
 				
 				for(int a = 0; a<tCtr; a++) {
-					if(a>0 && interestingTimes[a]==interestingTimes[a-1]) {
+					if(a>0 && intersectionTimes[a]==intersectionTimes[a-1]) {
 						//do nothing
-					} else if(interestingTimes[a]>0 && interestingTimes[a]<=1) {
+					} else if(intersectionTimes[a]>0 && intersectionTimes[a]<=1) {
 						//this is the magic: take 2 t values and see what we need to
 						//do with them.
 						//Remember we can make redundant horizontal/vertical lines
 						//all we want to because the ClippedPath will clean up
 						//the mess.
-						x = (float)xf.evaluate(interestingTimes[a]);
-						y = (float)yf.evaluate(interestingTimes[a]);
-						cappedX = x;
-						cappedY = y;
+						x = (float)xf.evaluate(intersectionTimes[a]);
+						y = (float)yf.evaluate(intersectionTimes[a]);
+						point.setLocation(x, y);
+						cap(point);
 						
-						if(cappedX<rLeft) {
-							cappedX = rLeft;
-						} else if(cappedX>rRight) {
-							cappedX = rRight;
-						}
-						if(cappedY<rTop) {
-							cappedY = rTop;
-						} else if(cappedY>rBottom) {
-							cappedY = rBottom;
-						}
+						thisValueIsCapped = !(Math.abs(x-point.x)<TOLERANCE && Math.abs(y-point.y)<TOLERANCE);
 						
-						thisValueIsCapped = !(Math.abs(x-cappedX)<TOLERANCE && Math.abs(y-cappedY)<TOLERANCE);
-						
-						x2 = (float)xf.evaluate((interestingTimes[a]+interestingTimes[a-1])/2);
-						y2 = (float)yf.evaluate((interestingTimes[a]+interestingTimes[a-1])/2);
-						midValueInvalid = !(rLeft<=x2 && x2<=rRight && rTop<=y2 && y2<=rBottom);
+						x2 = (float)xf.evaluate((intersectionTimes[a]+intersectionTimes[a-1])/2);
+						y2 = (float)yf.evaluate((intersectionTimes[a]+intersectionTimes[a-1])/2);
+						midValueInvalid = !contains(x2, y2);
 							
 						if(( xf instanceof LFunction) || thisValueIsCapped || lastValueWasCapped || midValueInvalid ) {
-							p.lineTo(cappedX,cappedY);
+							p.lineTo(point.x, point.y);
 						} else if((xf instanceof QFunction) || (xf instanceof CFunction)) {
-							p.curveTo(xf,yf,interestingTimes[a-1],interestingTimes[a]);
+							p.curveTo(xf,yf,intersectionTimes[a-1],intersectionTimes[a]);
 						} else {
 							throw new RuntimeException("Unexpected condition.");
 						}
@@ -506,27 +542,28 @@ public class Clipper {
 			g.setClip(newClip);
 			return;
 		}
-		Rectangle2D oldRect = null;
-		Rectangle2D newRect = null;
-		if(oldClip instanceof Rectangle2D) {
-			oldRect = (Rectangle2D)oldClip;
-		}
-		if(newClip instanceof Rectangle2D) {
-			newRect = (Rectangle2D)newClip;
-		}
+		Rectangle2D oldRect = RectangleReader.convert(oldClip);
+		Rectangle2D newRect = RectangleReader.convert(newClip);
 		
 		if(oldRect!=null && newRect!=null) {
-			g.setClip(oldRect.createIntersection(newRect));
+			Rectangle2D intersectedClip = oldRect.createIntersection(newRect);
+			if(intersectedClip.getWidth()<0 || intersectedClip.getHeight()<0) {
+				//a negative width or height indicates there's no real intersection
+				intersectedClip.setFrame(intersectedClip.getX(), intersectedClip.getY(), 0, 0);
+			}
+			g.setClip( intersectedClip );
 			return;
 		}
 		
 		if(newRect!=null && oldRect==null) {
-			g.setClip( Clipper.clipToRect(oldClip, newRect));
+			GeneralPath intersectedClip = Clipper.clipToRect(oldClip, newRect);
+			g.setClip( intersectedClip);
 			return;
 		}
 		
 		if(newRect==null && oldRect!=null) {
-			g.setClip( Clipper.clipToRect(newClip, oldRect));
+			GeneralPath intersectedClip = Clipper.clipToRect(newClip, oldRect);
+			g.setClip( intersectedClip );
 			return;
 		}
 

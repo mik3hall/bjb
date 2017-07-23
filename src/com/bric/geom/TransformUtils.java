@@ -1,9 +1,9 @@
 /*
  * @(#)TransformUtils.java
  *
- * $Date: 2009-02-20 01:34:41 -0600 (Fri, 20 Feb 2009) $
+ * $Date: 2012-03-14 01:34:46 -0500 (Wed, 14 Mar 2012) $
  *
- * Copyright (c) 2009 by Jeremy Wood.
+ * Copyright (c) 2011 by Jeremy Wood.
  * All rights reserved.
  *
  * The copyright of this software is owned by Jeremy Wood. 
@@ -12,16 +12,15 @@
  * Jeremy Wood. For details see accompanying license terms.
  * 
  * This software is probably, but not necessarily, discussed here:
- * http://javagraphics.blogspot.com/
+ * http://javagraphics.java.net/
  * 
- * And the latest version should be available here:
- * https://javagraphics.dev.java.net/
+ * That site should also contain the most recent official version
+ * of this software.  (See the SVN repository for more details.)
  */
 package com.bric.geom;
 
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Point2D;
-import java.awt.geom.Rectangle2D;
 
 import com.bric.math.Equations;
 
@@ -31,46 +30,27 @@ import com.bric.math.Equations;
  * 
  **/
 public class TransformUtils {
-
-	/** This calculates the scaling/shearing necessary to transform
-	 * one rectangle into another.
+	
+    /**
+	 * Compute the rotation angle of an affine transformation.
+	 * Counter-clockwise rotation is considered positive.
+	 *
+	 * @return rotation angle in radians (beween -pi and pi),
+	 *  or NaN if the transformation is bogus.
 	 */
-	  public static AffineTransform createAffineTransform(Rectangle2D oldRect,Rectangle2D newRect) {
-			Point2D oldP1 = new Point2D.Double(oldRect.getX(),oldRect.getY());
-			Point2D oldP2 = new Point2D.Double(oldRect.getX()+oldRect.getWidth(),oldRect.getY());
-			Point2D oldP3 = new Point2D.Double(oldRect.getX(),oldRect.getY()+oldRect.getHeight());
+	public static double getRotationAngle(AffineTransform transform) {
 
-			Point2D newP1 = new Point2D.Double(newRect.getX(),newRect.getY());
-			Point2D newP2 = new Point2D.Double(newRect.getX()+newRect.getWidth(),newRect.getY());
-			Point2D newP3 = new Point2D.Double(newRect.getX(),newRect.getY()+newRect.getHeight());
-			
-			return createAffineTransform(oldP1,oldP2,oldP3,newP1,newP2,newP3);
-		}
+		transform = (AffineTransform) transform.clone();
+		
+		// Eliminate any post-translation
+		transform.preConcatenate(AffineTransform.getTranslateInstance(
+				-transform.getTranslateX(), -transform.getTranslateY()));
 
-		/** This transforms a rectangle according to an AffineTransform.
-		 * This method assumes that the transform does not involve rotating
-		 * and shearing (that is, this transform should only involve
-		 * scaling, translating, and possible rotations at 90 degree increments.)
-		*/
-      public static Rectangle2D transform(AffineTransform transform,Rectangle2D r) {
-    	return transform(transform,r,null);  
-      }
-      
-
-		/** This transforms a rectangle according to an AffineTransform.
-		 * This method assumes that the transform does not involve rotating
-		 * and shearing (that is, this transform should only involve
-		 * scaling, translating, and possible rotations at 90 degree increments.)
-		*/
-        public static Rectangle2D transform(AffineTransform transform,Rectangle2D r,Rectangle2D dest) {
-            if(dest==null)
-            	dest = new Rectangle2D.Double();
-            dest.setFrame(r.getX()*transform.getScaleX()+transform.getTranslateX(),
-            		r.getY()*transform.getScaleY()+transform.getTranslateY(),
-            		r.getWidth()*transform.getScaleX(),
-            		r.getHeight()*transform.getScaleY());
-            return dest;
-        }
+		Point2D p1 = new Point2D.Double(1,0);
+		p1 = transform.transform(p1,p1);
+		
+		return Math.atan2(p1.getY(),p1.getX());
+	}
 		
 		/** Given 3 points, this will return the <code>AffineTransform</code> that links each <code>initial</code>
 		* to <code>final</code> point.
@@ -100,7 +80,14 @@ public class TransformUtils {
 			double[][] matrix = { {oldX1, oldY1, 1, newX1},
 					{oldX2, oldY2, 1, newX2},
 					{oldX3, oldY3, 1, newX3} };
-			Equations.solve(matrix,true);
+			try {
+				Equations.solve(matrix,true);
+			} catch(RuntimeException e) {
+				System.err.println("( "+oldX1+", "+oldY1+") -> ( "+newX1+", "+newY1+")");
+				System.err.println("( "+oldX2+", "+oldY2+") -> ( "+newX2+", "+newY2+")");
+				System.err.println("( "+oldX3+", "+oldY3+") -> ( "+newX3+", "+newY3+")");
+				throw e;
+			}
 			double m00 = matrix[0][3];
 			double m01 = matrix[1][3];
 			double m02 = matrix[2][3];

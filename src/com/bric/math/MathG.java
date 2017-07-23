@@ -1,9 +1,9 @@
 /*
  * @(#)MathG.java
  *
- * $Date: 2009-09-07 07:44:40 -0500 (Mon, 07 Sep 2009) $
+ * $Date: 2012-07-03 01:10:05 -0500 (Tue, 03 Jul 2012) $
  *
- * Copyright (c) 2009 by Jeremy Wood.
+ * Copyright (c) 2011 by Jeremy Wood.
  * All rights reserved.
  *
  * The copyright of this software is owned by Jeremy Wood. 
@@ -12,15 +12,17 @@
  * Jeremy Wood. For details see accompanying license terms.
  * 
  * This software is probably, but not necessarily, discussed here:
- * http://javagraphics.blogspot.com/
+ * http://javagraphics.java.net/
  * 
- * And the latest version should be available here:
- * https://javagraphics.dev.java.net/
+ * That site should also contain the most recent official version
+ * of this software.  (See the SVN repository for more details.)
  */
 package com.bric.math;
 
-import java.util.Arrays;
-import java.util.Random;
+import com.bric.math.function.Function;
+import com.bric.math.function.PiecewiseFunction;
+import com.bric.math.function.PolynomialFunction;
+
 
 /** This provides some alternative implementations of a few methods from
  * the Math class.
@@ -31,374 +33,30 @@ import java.util.Random;
  * class offers.
  * <P>Many thanks to Oleg E. for some insights regarding machine error and
  * design.
+ * <P>See MathGDemo.java for a set of tests comparing the speed/accuracy
+ * of java.lang.Math and com.bric.math.MathG.
  *
- * @see http://javagraphics.blogspot.com/2009/05/math-studying-performance.html
  */
 public abstract class MathG {
-	/** Runs some tests comparing Math and MathG.
-	 */
-    public static void main(String[] args) {
-		System.out.println("Running comparison of Math vs MathG on "+System.getProperty("os.name")+" "+System.getProperty("os.version")+", Java "+System.getProperty("java.version"));
-    	testIncreasingMax();
-    	testEverything();
-    	System.out.println("Done.");
-    }
-    
-    private static void testEverything() {
-		System.out.println("\tCalling testEverything()");
-    	long[] times = new long[200];
-		double[] values = new double[1000000];
-		Random random = new Random(0);
-		for(int a = 0; a<values.length; a++) {
-			if(false) { //only positive numbers
-				values[a] = (random.nextDouble())*10000;
-			} else { //include negative numbers
-				values[a] = (random.nextDouble()-.5)*10000*2;
-			}
-		}
-		
-		
-		for(int a = 0; a<times.length; a++) {
-			Thread.yield();
-			times[a] = System.currentTimeMillis();
-			for(int b = 0; b<values.length; b++) {
-				sin01(values[b]);
-			}
-			times[a] = System.currentTimeMillis()-times[a];
-		}
-		
-		Arrays.sort(times);
-		System.out.println("\tMathG.sin01() median time: "+times[times.length/2]+" ms");
-		
-		for(int a = 0; a<times.length; a++) {
-			Thread.yield();
-			times[a] = System.currentTimeMillis();
-			for(int b = 0; b<values.length; b++) {
-				sin00004(values[b]);
-			}
-			times[a] = System.currentTimeMillis()-times[a];
-		}
-		
-		Arrays.sort(times);
-		System.out.println("\tMathG.sin00004() median time: "+times[times.length/2]+" ms");
-		
-		for(int a = 0; a<times.length; a++) {
-			Thread.yield();
-			times[a] = System.currentTimeMillis();
-			for(int b = 0; b<values.length; b++) {
-				Math.sin(values[b]);
-			}
-			times[a] = System.currentTimeMillis()-times[a];
-		}
-		
-		Arrays.sort(times);
-		System.out.println("\tMath.sin() median time: "+times[times.length/2]+" ms");
-		
-		/////////////////////////////
-		
-		for(int a = 0; a<times.length; a++) {
-			Thread.yield();
-			times[a] = System.currentTimeMillis();
-			for(int b = 0; b<values.length; b++) {
-				cos01(values[b]);
-			}
-			times[a] = System.currentTimeMillis()-times[a];
-		}
-		
-		Arrays.sort(times);
-		System.out.println("\tMathG.cos01() median time: "+times[times.length/2]+" ms");
-
-		for(int a = 0; a<times.length; a++) {
-			Thread.yield();
-			times[a] = System.currentTimeMillis();
-			for(int b = 0; b<values.length; b++) {
-				cos00004(values[b]);
-			}
-			times[a] = System.currentTimeMillis()-times[a];
-		}
-		
-		Arrays.sort(times);
-		System.out.println("\tMathG.cos00004() median time: "+times[times.length/2]+" ms");
-		
-		for(int a = 0; a<times.length; a++) {
-			Thread.yield();
-			times[a] = System.currentTimeMillis();
-			for(int b = 0; b<values.length; b++) {
-				Math.cos(values[b]);
-			}
-			times[a] = System.currentTimeMillis()-times[a];
-		}
-		
-		Arrays.sort(times);
-		System.out.println("\tMath.cos() median time: "+times[times.length/2]+" ms");
-
-		////////////////////////////////
-		
-		for(int a = 0; a<times.length; a++) {
-			Thread.yield();
-			times[a] = System.currentTimeMillis();
-			for(int b = 0; b<values.length; b++) {
-				floorDouble(values[b]);
-			}
-			times[a] = System.currentTimeMillis()-times[a];
-		}
-		
-		Arrays.sort(times);
-		System.out.println("\tMathG.floorDouble() median time: "+times[times.length/2]+" ms");
-		
-		for(int a = 0; a<times.length; a++) {
-			Thread.yield();
-			times[a] = System.currentTimeMillis();
-			for(int b = 0; b<values.length; b++) {
-				floorInt(values[b]);
-			}
-			times[a] = System.currentTimeMillis()-times[a];
-		}
-		
-		Arrays.sort(times);
-		System.out.println("\tMathG.floorInt() median time: "+times[times.length/2]+" ms");
-		
-		for(int a = 0; a<times.length; a++) {
-			Thread.yield();
-			times[a] = System.currentTimeMillis();
-			for(int b = 0; b<values.length; b++) {
-				Math.floor(values[b]);
-			}
-			times[a] = System.currentTimeMillis()-times[a];
-		}
-		
-		Arrays.sort(times);
-		System.out.println("\tMath.floorDouble() median time: "+times[times.length/2]+" ms");
-		
-		/////////////////////////
-		
-		for(int a = 0; a<times.length; a++) {
-			Thread.yield();
-			times[a] = System.currentTimeMillis();
-			for(int b = 0; b<values.length; b++) {
-				ceilDouble(values[b]);
-			}
-			times[a] = System.currentTimeMillis()-times[a];
-		}
-		
-		Arrays.sort(times);
-		System.out.println("\tMathG.ceilDouble() median time: "+times[times.length/2]+" ms");
-		
-		for(int a = 0; a<times.length; a++) {
-			Thread.yield();
-			times[a] = System.currentTimeMillis();
-			for(int b = 0; b<values.length; b++) {
-				ceilInt(values[b]);
-			}
-			times[a] = System.currentTimeMillis()-times[a];
-		}
-		
-		Arrays.sort(times);
-		System.out.println("\tMathG.ceilInt() median time: "+times[times.length/2]+" ms");
-		
-		for(int a = 0; a<times.length; a++) {
-			Thread.yield();
-			times[a] = System.currentTimeMillis();
-			for(int b = 0; b<values.length; b++) {
-				Math.ceil(values[b]);
-			}
-			times[a] = System.currentTimeMillis()-times[a];
-		}
-		
-		Arrays.sort(times);
-		System.out.println("\tMath.ceilDouble() median time: "+times[times.length/2]+" ms");
-		
-		///////////////////////////////////
-
-		for(int a = 0; a<times.length; a++) {
-			Thread.yield();
-			times[a] = System.currentTimeMillis();
-			for(int b = 0; b<values.length; b++) {
-				roundDouble(values[b]);
-			}
-			times[a] = System.currentTimeMillis()-times[a];
-		}
-		
-		Arrays.sort(times);
-		System.out.println("\tMathG.roundDouble() median time: "+times[times.length/2]+" ms");
-		
-		for(int a = 0; a<times.length; a++) {
-			Thread.yield();
-			times[a] = System.currentTimeMillis();
-			for(int b = 0; b<values.length; b++) {
-				roundInt(values[b]);
-			}
-			times[a] = System.currentTimeMillis()-times[a];
-		}
-		
-		Arrays.sort(times);
-		System.out.println("\tMathG.roundInt() median time: "+times[times.length/2]+" ms");
-		
-		for(int a = 0; a<times.length; a++) {
-			Thread.yield();
-			times[a] = System.currentTimeMillis();
-			for(int b = 0; b<values.length; b++) {
-				Math.round(values[b]);
-			}
-			times[a] = System.currentTimeMillis()-times[a];
-		}
-		
-		Arrays.sort(times);
-		System.out.println("\tMath.round() median time: "+times[times.length/2]+" ms");
-	
-		/////////////
-		
-		double maxError = 0;
-		for(int a = 0; a<values.length; a++) {
-			double error = sin01(values[a])-Math.sin(values[a]);
-			if(error<0) error = -error;
-			if(error>maxError)
-				maxError = error;
-		}
-		System.out.println("max error for sin01 = "+maxError);
-		
-		maxError = 0;
-		for(int a = 0; a<values.length; a++) {
-			double error = sin00004(values[a])-Math.sin(values[a]);
-			if(error<0) error = -error;
-			if(error>maxError)
-				maxError = error;
-		}
-		System.out.println("max error for sin00004 = "+maxError);
-		
-
-		maxError = 0;
-		for(int a = 0; a<values.length; a++) {
-			double error = ceilDouble(values[a])-Math.ceil(values[a]);
-			if(error<0) error = -error;
-			if(error>maxError)
-				maxError = error;
-		}
-		System.out.println("max error for ceil = "+maxError);
-
-		maxError = 0;
-		for(int a = 0; a<values.length; a++) {
-			double error = floorDouble(values[a])-Math.floor(values[a]);
-			if(error<0) error = -error;
-			if(error>maxError)
-				maxError = error;
-		}
-		System.out.println("max error for floor = "+maxError);
-
-		maxError = 0;
-		for(int a = 0; a<values.length; a++) {
-			double error = roundDouble(values[a])-Math.round(values[a]);
-			if(error<0) error = -error;
-			if(error>maxError)
-				maxError = error;
-		}
-		System.out.println("max error for round = "+maxError);
-    }
-    
-    private static void testIncreasingMax() {
-		System.out.println("\tCalling testIncreasingMax()");
-		double max = 2;
-		while(max<2e10) {
-			System.out.println("max: "+max);
-			long[] times = new long[200];
-			double[] values = new double[1000000];
-			Random random = new Random(0);
-			for(int a = 0; a<values.length; a++) {
-				values[a] = (random.nextDouble()-.5)*max*2;
-			}
-			
-			
-			for(int a = 0; a<times.length; a++) {
-				Thread.yield();
-				times[a] = System.currentTimeMillis();
-				for(int b = 0; b<values.length; b++) {
-					sin01(values[b]);
-				}
-				times[a] = System.currentTimeMillis()-times[a];
-			}
-			
-			Arrays.sort(times);
-			System.out.println("\tMathG.sin01() median time: "+times[times.length/2]+" ms");
-			
-			for(int a = 0; a<times.length; a++) {
-				Thread.yield();
-				times[a] = System.currentTimeMillis();
-				for(int b = 0; b<values.length; b++) {
-					sin00004(values[b]);
-				}
-				times[a] = System.currentTimeMillis()-times[a];
-			}
-			
-			Arrays.sort(times);
-			System.out.println("\tMathG.sin00004() median time: "+times[times.length/2]+" ms");
-			
-			for(int a = 0; a<times.length; a++) {
-				Thread.yield();
-				times[a] = System.currentTimeMillis();
-				for(int b = 0; b<values.length; b++) {
-					Math.sin(values[b]);
-				}
-				times[a] = System.currentTimeMillis()-times[a];
-			}
-			
-			Arrays.sort(times);
-			System.out.println("\tMath.sin() median time: "+times[times.length/2]+" ms");
-			
-			
-			double maxError = 0;
-			for(int a = 0; a<values.length; a++) {
-				double error = sin01(values[a])-Math.sin(values[a]);
-				if(error<0) error = -error;
-				if(error>maxError)
-					maxError = error;
-			}
-			if(maxError>.011) { //this is not supposed to happen!
-				System.err.println("max error for sin01 = "+maxError);
-			}
-			
-			maxError = 0;
-			for(int a = 0; a<values.length; a++) {
-				double error = sin00004(values[a])-Math.sin(values[a]);
-				if(error<0) error = -error;
-				if(error>maxError)
-					maxError = error;
-			}
-			if(maxError>.00004) { //this is not supposed to happen!
-				System.err.println("max error for sin00004 = "+maxError);
-			}
-	
-			max = max*10;
-		}
-	}
 
 	/** Finds the closest integer that is less than or equal to the argument as a double.
-	 * @warning do not use an argument greater than 1e10, or less than 1e-10.
+	 * <BR>Warning: do not use an argument greater than 1e10, or less than 1e-10.
 	 */
 	public static final double floorDouble(double d) {
-		int i;
-		if(d>=0) {
-			i = (int)d;
-		} else {
-			i = -((int)(-d))-1;
-		}
-		return i;
+		int id = (int)d;
+		return d==id || d > 0 ? id : id-1;
 	}
 	
 	/** Finds the closest integer that is less than or equal to the argument as an int.
-	 * @warning do not use an argument greater than 1e10, or less than 1e-10.
+	 * <BR>Warning: do not use an argument greater than 1e10, or less than 1e-10.
 	 */
 	public static final int floorInt(double d) {
-		int i;
-		if(d>=0) {
-			i = (int)d;
-		} else {
-			i = -((int)(-d))-1;
-		}
-		return i;
+		int id = (int)d;
+		return d==id || d > 0 ? id : id-1;
 	}
 
 	/** Rounds a double to the nearest integer value.
-	 * @warning do not use an argument greater than 1e10, or less than 1e-10.
+	 * <BR>Warning: do not use an argument greater than 1e10, or less than 1e-10.
 	 */
 	public static final int roundInt(double d) {
 		int i;
@@ -411,7 +69,7 @@ public abstract class MathG {
 	}
 	
 	/** Rounds a double to the nearest integer value.
-	 * @warning do not use an argument greater than 1e10, or less than 1e-10.
+	 * <BR>Warning: do not use an argument greater than 1e10, or less than 1e-10.
 	 */
 	public static final double roundDouble(double d) {
 		int i;
@@ -424,65 +82,64 @@ public abstract class MathG {
 	}
 	
 	/** Finds the closest integer that is greater than or equal to the argument as an int.
-	 * @warning do not use an argument greater than 1e10, or less than 1e-10.
+	 * <BR>Warning: do not use an argument greater than 1e10, or less than 1e-10.
 	 */
 	public static final int ceilInt(double d) {
-		int i;
-		if(d>=0) {
-			i = -((int)(-d))+1;
-		} else {
-			i = (int)(d);
-		}
-		return i;
+		int id = (int)d;
+		return d==id || d < 0 ? id : -((int)(-d))+1;
 	}
 	
 	/** Finds the closest integer that is greater than or equal to the argument as a double.
-	 * @warning do not use an argument greater than 1e10, or less than 1e-10.
+	 * <BR>Warning: do not use an argument greater than 1e10, or less than 1e-10.
 	 */
 	public static final double ceilDouble(double d) {
-		int i;
-		if(d>=0) {
-			i = -((int)(-d))+1;
-		} else {
-			i = (int)(d);
-		}
-		return i;
+		int id = (int)d;
+		return d==id || d < 0 ? id : -((int)(-d))+1;
 	}
 	
 	private static final double PI = Math.PI;
 	private static final double TWO_PI = 2.0*Math.PI;
 	private static final double PI_OVER_2 = Math.PI/2.0;
-	private static double[] sinCoefficients01 = createSinApproximation(new double[] {0, Math.PI/2});
-	private static double[] sinCoefficients00004 = createSinApproximation(new double[] {0, Math.PI/4, Math.PI/2});
 	
-	/** Creates a polynomial equation that approximates the first arc of the sine curve.
-	 */
-	private static double[] createSinApproximation(double[] points) {
-		double[][] coefficientsMatrix = new double[points.length*2][points.length*2+1];
-		for(int row = 0; row<coefficientsMatrix.length; row+=2) {
-			//make one row focusing on the value of sin(x),
-			//and the next row focusing on the value of sin'(x)
-			for(int column = 0; column<coefficientsMatrix[row].length-1; column++) {
-				int power = points.length*2-column-1;
-				coefficientsMatrix[row][column] = Math.pow(points[row/2], power);
-				if(power==0) { //no derivative for this one
-					coefficientsMatrix[row+1][column] = 0;
-				} else {
-					coefficientsMatrix[row+1][column] = power*Math.pow(points[row/2], power-1);
-				}
+	private static Function sinFunction01 = PolynomialFunction.createFit(
+			new double[] { 0, Math.PI/2},
+			new double[] { Math.sin(0), Math.sin(Math.PI/2)}, 
+			new double[] { Math.cos(0), Math.cos(Math.PI/2)} );
+	
+	private static Function sinFunction00004 = PolynomialFunction.createFit(
+			new double[] { 0, Math.PI/4, Math.PI/2},
+			new double[] { Math.sin(0), Math.sin(Math.PI/4), Math.sin(Math.PI/2)}, 
+			new double[] { Math.cos(0), Math.cos(Math.PI/4), Math.cos(Math.PI/2)} );
+	
+	private static Function acosFunction;
+	
+	//define the acosFunction:
+	static {
+		Function acos = new Function() {
+			public double evaluate(double x) {
+				return Math.acos(x);
 			}
-			coefficientsMatrix[row][coefficientsMatrix[row].length-1] = Math.sin(points[row/2]);
-			coefficientsMatrix[row+1][coefficientsMatrix[row].length-1] = Math.cos(points[row/2]);
-		}
-		
-		Equations.solve(coefficientsMatrix, true);
-		double[] returnValue = new double[coefficientsMatrix.length];
-		for(int a = 0; a<returnValue.length; a++) {
-			returnValue[a] = coefficientsMatrix[a][coefficientsMatrix[a].length-1];
-		}
-		return returnValue;
+			public double[] evaluateInverse(double y) {
+				throw new UnsupportedOperationException();
+			}
+		};
+		Function acosD = new Function() {
+			public double evaluate(double x) {
+				return -1.0/Math.sqrt(1-x*x);
+			}
+			public double[] evaluateInverse(double y) {
+				throw new UnsupportedOperationException();
+			}
+		};
+
+		PiecewiseFunction p = PiecewiseFunction.create(acos, acosD, 0, 1, 512);
+		p.setFunction(p.getFunctionCount()-1, 
+				PiecewiseFunction.create(acos, acosD, 
+				1.0-1.0/(p.getFunctionCount()), 
+				1, 64));
+		acosFunction = p;
 	}
-	
+
 	/** Returns an approximate value of the sin(v) that should be
 	 * within plus-or-minus .0108 of the value returned by Math.sin().
 	 * <P>If the argument is greater in magnitude than 1e10, then
@@ -533,10 +190,8 @@ public abstract class MathG {
 			v = PI-v;
 		}
 		
-		double result = sinCoefficients01[0];
-		for(int a = 1, n = sinCoefficients01.length; a<n; a++) {
-			result = result*v+sinCoefficients01[a];
-		}
+		
+		double result = sinFunction01.evaluate(v);
 		result = result*finalMultiplier;
 		
 		return result;
@@ -603,15 +258,28 @@ public abstract class MathG {
 		if(v>PI_OVER_2) {
 			v = PI-v;
 		}
-		
-		double result = sinCoefficients00004[0];
-		for(int a = 1, n = sinCoefficients00004.length; a<n; a++) {
-			result = result*v+sinCoefficients00004[a];
-		}
+
+		double result = sinFunction00004.evaluate(v);
 		result = result*finalMultiplier;
 		
 		return result;
 	}
+	
+	/** Returns an approximate value of the acos(v) that should be
+	 * within plus-or-minus .00004 of the value returned by Math.acos().
+	 * 
+	 * @param v
+	 * @return an approximate value of acos(v)
+	 */
+	public static final double acos(double v) {
+		if(v<-1 || v>1) throw new IllegalArgumentException("v ("+v+") must be within [-1,1]");
+		if(v<0) {
+			v = -v;
+			return Math.PI-acos(v);
+		}
+		return acosFunction.evaluate(v);
+	}
+
 
 	/** Returns an approximate value of the cos(v) that should be
 	 * within plus-or-minus .00004 of the value returned by Math.cos().

@@ -1,9 +1,9 @@
 /*
  * @(#)ShapeBounds.java
  *
- * $Date: 2009-04-27 10:40:48 -0500 (Mon, 27 Apr 2009) $
+ * $Date: 2011-05-02 16:01:45 -0500 (Mon, 02 May 2011) $
  *
- * Copyright (c) 2009 by Jeremy Wood.
+ * Copyright (c) 2011 by Jeremy Wood.
  * All rights reserved.
  *
  * The copyright of this software is owned by Jeremy Wood. 
@@ -12,10 +12,10 @@
  * Jeremy Wood. For details see accompanying license terms.
  * 
  * This software is probably, but not necessarily, discussed here:
- * http://javagraphics.blogspot.com/
+ * http://javagraphics.java.net/
  * 
- * And the latest version should be available here:
- * https://javagraphics.dev.java.net/
+ * That site should also contain the most recent official version
+ * of this software.  (See the SVN repository for more details.)
  */
 package com.bric.geom;
 
@@ -79,12 +79,7 @@ public class ShapeBounds {
 	 */
 	public static Rectangle2D getBounds(Shape shape,AffineTransform transform,Rectangle2D r) throws EmptyPathException {
 		PathIterator i = shape.getPathIterator(transform);
-		try {
-			return getBounds(i,r);
-		} catch(RuntimeException e) {
-			System.err.println(ShapeStringUtils.toString(shape));
-			throw e;
-		}
+		return getBounds(i,r);
 	}
 
 
@@ -128,7 +123,7 @@ public class ShapeBounds {
 		float lastX = 0;
 		float lastY = 0;
 
-		//A, B, C, and D in the hermitic equation x = a*t^3+b*t^2+c*t+d
+		//A, B, C, and D in the equation x = a*t^3+b*t^2+c*t+d
 		//or A, B, and C in the equation x = a*t^2+b*t+c
 		float[] x_coeff = new float[4];
 		float[] y_coeff = new float[4];

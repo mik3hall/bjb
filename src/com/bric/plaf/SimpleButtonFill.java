@@ -1,3 +1,22 @@
+/*
+ * @(#)SimpleButtonFill.java
+ *
+ * $Date: 2012-07-03 01:10:05 -0500 (Tue, 03 Jul 2012) $
+ *
+ * Copyright (c) 2011 by Jeremy Wood.
+ * All rights reserved.
+ *
+ * The copyright of this software is owned by Jeremy Wood. 
+ * You may not use, copy or modify this software, except in  
+ * accordance with the license agreement you entered into with  
+ * Jeremy Wood. For details see accompanying license terms.
+ * 
+ * This software is probably, but not necessarily, discussed here:
+ * http://javagraphics.java.net/
+ * 
+ * That site should also contain the most recent official version
+ * of this software.  (See the SVN repository for more details.)
+ */
 package com.bric.plaf;
 
 import java.awt.Color;
@@ -12,6 +31,7 @@ public abstract class SimpleButtonFill extends ButtonFill {
 	
 	protected static final Color shadowHighlight = new Color(255,255,255,120);
 	/** Returns a translucent white. */
+	@Override
 	public Color getShadowHighlight(AbstractButton button) {
 		return shadowHighlight;
 	}
@@ -23,7 +43,7 @@ public abstract class SimpleButtonFill extends ButtonFill {
 	 * @param fillRect the rectangle the fill applies to.
 	 * @return the paint to use when a toggle button is selected.
 	 */
-	protected abstract Paint getDarkestFill(Rectangle fillRect);
+	public abstract Paint getDarkestFill(Rectangle fillRect);
 
 	/** This fill is slightly darker than the normal fill.
 	 * Depending on whether the button being rendered is
@@ -34,7 +54,7 @@ public abstract class SimpleButtonFill extends ButtonFill {
 	 * @return the paint to use when this button is pressed or
 	 * selected.
 	 */
-	protected abstract Paint getDarkerFill(Rectangle fillRect);
+	public abstract Paint getDarkerFill(Rectangle fillRect);
 
 	/** The rollover fill of this button, or null if there is
 	 * no special fill for rollovers.  If this is null, then
@@ -42,15 +62,16 @@ public abstract class SimpleButtonFill extends ButtonFill {
 	 * @param fillRect the rectangle the fill applies to.
 	 * @return the paint to use when this button is rolled over.
 	 */
-	protected abstract Paint getRolloverFill(Rectangle fillRect);
+	public abstract Paint getRolloverFill(Rectangle fillRect);
 	
 	/** The normal fill of this button.  Unlike the other <code>getter()</code>
 	 * methods in this class: this cannot return null.
 	 * @param fillRect the rectangle the fill applies to.
 	 * @return the paint to use when this button is in its normal state.
 	 */
-	protected abstract Paint getNormalFill(Rectangle fillRect);
+	public abstract Paint getNormalFill(Rectangle fillRect);
 
+	@Override
 	public Paint getFill(AbstractButton button, Rectangle fillRect) {
 		ButtonModel model = button.getModel();
 		if(button instanceof JToggleButton) {
