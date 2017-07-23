@@ -1,1 +1,0 @@
-package org.bjb;public interface BalancedStrategy {	/**	 * balanced requires you to determine count per deck = running count / # of decks	 */	public int getRunningCount();	}
