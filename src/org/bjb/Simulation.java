@@ -51,6 +51,7 @@ public class Simulation extends JDialog {
 		static final JComboBox<String> pc2 = new JComboBox<String>(cards);
 		static final boolean xverbose = true;
 		public static final int RDS_PER_HR = 100;
+		private static us.hall.osx.LogOut logout = us.hall.osx.LogOut.getInstance();
 		
 		// Create an action
 	    Action canact = new AbstractAction("Cancel") {
@@ -155,10 +156,15 @@ public class Simulation extends JDialog {
 			strategies.setBackground(Color.white);
 			playersPanel.add(strategies,pc);
 			strategies.addItemListener(new ItemListener() {
+				ItemEvent lastEvent = null;
+				
 				public void itemStateChanged(ItemEvent e) {
+					logout.println("listModel add event " + e);
 					String strategy = (String)e.getItem();
-					if (e.getStateChange() == ItemEvent.SELECTED && !strategy.equals("none"))
+					if (!e.equals(lastEvent) && e.getStateChange() == ItemEvent.SELECTED && !strategy.equals("none")) {
 						listModel.addElement(strategy);
+						lastEvent = e;
+					}
 				}				
 			});
 			pc.gridy = 7;
